@@ -46,7 +46,7 @@ public class DrawingLib
                 Path.Combine(
                     pluginInterface.DalamudAssetDirectory.FullName,
                     "UIRes",
-                    "NotoSansKR-Regular.otf"
+                    "NotoSansCJKsc-Medium.otf"
                 )
             ),
             0
