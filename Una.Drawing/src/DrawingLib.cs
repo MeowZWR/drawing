@@ -1,21 +1,19 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using Dalamud.Interface;
+﻿using Dalamud.Interface;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Una.Drawing.Debugger;
 using Una.Drawing.Font;
+using Una.Drawing.NodeParser;
+using Una.Drawing.Templating.StyleParser;
 using Una.Drawing.Texture;
 
 namespace Una.Drawing;
 
 public class DrawingLib
 {
+    public static bool ShowDebugWindow { get; set; }
+
     /// <summary>
     /// Set up the drawing library. Make sure to call this method in your
     /// plugin before using any of the drawing library's features.
@@ -26,10 +24,15 @@ public class DrawingLib
         DalamudServices.PluginInterface = pluginInterface;
         DalamudServices.UiBuilder       = pluginInterface.UiBuilder;
 
+        ElementRegistry.Register<Node>();
+
+        DalamudServices.CommandManager.AddHandler("/una-drawing",
+            new(OnChatCommand) { HelpMessage = "Una.Drawing Commands", ShowInHelp = false }
+        );
+
         pluginInterface.UiBuilder.Draw += OnDraw;
 
-        if (downloadGameGlyphs)
-        {
+        if (downloadGameGlyphs) {
             await GameGlyphProvider.DownloadGameGlyphs();
             FontRegistry.SetupGlyphFont();
         }
@@ -76,7 +79,7 @@ public class DrawingLib
             0
         );
 
-        FontRegistry.SetNativeFontFamily(3, "Arial", SKFontStyleWeight.ExtraBold);
+        FontRegistry.SetNativeFontFamily(3, "Arial");
 
         if (GameGlyphProvider.GlyphsFile.Exists) {
             FontRegistry.SetNativeFontFamily(4, GameGlyphProvider.GlyphsFile);
@@ -84,6 +87,9 @@ public class DrawingLib
 
         GfdIconRepository.Setup();
         Renderer.Setup();
+
+        UdtLoader.RegisterAttributeValueParser(new DefaultAttributeValueParser());
+        UdtLoader.RegisterDirectiveParser(new SeStringDirectiveParser());
     }
 
     /// <summary>
@@ -92,6 +98,8 @@ public class DrawingLib
     /// </summary>
     public static void Dispose()
     {
+        DebugLogger.Log($"Shutting down {nameof(DrawingLib)}...");
+
         DalamudServices.PluginInterface.UiBuilder.Draw -= OnDraw;
 
         Renderer.Dispose();
@@ -99,11 +107,57 @@ public class DrawingLib
         GfdIconRepository.Dispose();
         TextureLoader.Dispose();
         MouseCursor.Dispose();
+        StylesheetRegistry.Dispose();
+        ElementRegistry.Dispose();
+        StyleAttributeParser.Dispose();
+        NodeAttributeParser.Dispose();
+        QuerySelectorParser.Dispose();
+        NodeDebugger.Dispose();
+        UdtLoader.Dispose();
+
+        // Force the GC to run to clean up any remaining resources.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
     }
 
     private static void OnDraw()
     {
         MouseCursor.Update();
+
+        if (ShowDebugWindow) {
+            NodeDebugger.Render();
+        }
+    }
+
+    private static void OnChatCommand(string command, string args)
+    {
+        if (command != "/una-drawing") return;
+
+        if (args == String.Empty) {
+            Print("Available commands: debug, bounds.");
+            return;
+        }
+
+        switch (args.ToLower()) {
+            case "debug":
+                ShowDebugWindow = !ShowDebugWindow;
+                break;
+            case "bounds":
+                Node.DrawDebugBoundingBoxes = !Node.DrawDebugBoundingBoxes;
+                break;
+            default:
+                Print($"Unknown command: {args}. Available commands: debug, bounds.");
+                break;
+        }
+    }
+
+    private static void Print(string msg)
+    {
+        if (DalamudServices.ClientState.IsLoggedIn) {
+            DalamudServices.ChatGui.Print(msg);
+        } else {
+            DalamudServices.PluginLog.Info(msg);
+        }
     }
 }
 
@@ -113,6 +167,10 @@ internal class DalamudServices
     [PluginService] public static ITextureProvider             TextureProvider             { get; set; } = null!;
     [PluginService] public static ITextureSubstitutionProvider TextureSubstitutionProvider { get; set; } = null!;
     [PluginService] public static IPluginLog                   PluginLog                   { get; set; } = null!;
+    [PluginService] public static ICommandManager              CommandManager              { get; set; } = null!;
+    [PluginService] public static IChatGui                     ChatGui                     { get; set; } = null!;
+    [PluginService] public static IClientState                 ClientState                 { get; set; } = null!;
+    [PluginService] public static IFramework                   Framework                   { get; set; } = null!;
 
     public static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     public static IUiBuilder              UiBuilder       { get; set; } = null!;

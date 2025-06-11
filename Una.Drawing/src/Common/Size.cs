@@ -1,24 +1,17 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing;
+﻿namespace Una.Drawing;
 
 /// <summary>
 /// Defines the size of an object in pixels. A size of 0 on either axis is
 /// considered undefined, meaning that the object will be sized based on its
 /// content and child nodes.
 /// </summary>
-public record Size(int Width = 0, int Height = 0)
+public record Size(float Width = 0, float Height = 0)
 {
-    public int Width  { get; set; } = Width;
-    public int Height { get; set; } = Height;
+    public float Width  { get; set; } = Width;
+    public float Height { get; set; } = Height;
 
     public Size() : this(0, 0) { }
-    public Size(int size) : this(size, size) { }
+    public Size(float size) : this(size, size) { }
 
     /// <summary>
     /// True if both sides have an undefined size, meaning that the box should
@@ -38,13 +31,13 @@ public record Size(int Width = 0, int Height = 0)
     /// True if the width is 0, meaning that the box should only be auto-sized
     /// horizontally based on its content and child nodes.
     /// </summary>
-    public bool IsAutoWidth => Width == 0;
+    public bool IsFitWidth => Width == 0;
 
     /// <summary>
     /// True if the height is undefined, meaning that the box should only be
     /// auto-sized vertically based on its content and child nodes.
     /// </summary>
-    public bool IsAutoHeight => Height == 0;
+    public bool IsFitHeight => Height == 0;
 
     /// <summary>
     /// True if the size is 0 on both axes, meaning that the box should be
@@ -52,7 +45,7 @@ public record Size(int Width = 0, int Height = 0)
     /// </summary>
     public bool IsZero => Width == 0 && Height == 0;
 
-    public override string ToString()    => $"Size({Width}, {Height})";
+    public override string ToString()    => $"({Width}, {Height})";
 
     public static Size operator +(Size  left, Size right) => new(left.Width + right.Width, left.Height + right.Height);
     public static Size operator -(Size  left, Size right) => new(left.Width - right.Width, left.Height - right.Height);

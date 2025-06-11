@@ -10,10 +10,13 @@ internal partial class DynamicFont
         if (TextFontCache.TryGetValue(fontSize, out SKFont? cachedFont)) return cachedFont;
 
         var font = new SKFont(TextTypeface, fontSize + SizeOffset);
-        font.Hinting  = SKFontHinting.Full;
-        font.Edging   = SKFontEdging.SubpixelAntialias;
-        font.Subpixel = false;
-        font.Embolden = false;
+        font.Edging           = SKFontEdging.SubpixelAntialias;
+        font.ForceAutoHinting = true;
+        font.Subpixel         = true;
+        font.Embolden         = false;
+        font.BaselineSnap     = false;
+        font.EmbeddedBitmaps  = true;
+        font.LinearMetrics    = false;
 
         TextFontCache[fontSize] = font;
 
@@ -25,15 +28,16 @@ internal partial class DynamicFont
         if (GlyphFontCache.TryGetValue(fontSize, out SKFont? cachedFont)) return cachedFont;
 
         var font = new SKFont(GlyphTypeface, fontSize + SizeOffset);
-        font.Hinting  = SKFontHinting.Full;
-        font.Edging   = SKFontEdging.SubpixelAntialias;
-        font.Subpixel = false;
-        font.Embolden = false;
+        font.Edging           = SKFontEdging.SubpixelAntialias;
+        font.ForceAutoHinting = true;
+        font.Subpixel         = true;
+        font.Embolden         = false;
+        font.BaselineSnap     = false;
+        font.EmbeddedBitmaps  = true;
+        font.LinearMetrics    = true;
 
         GlyphFontCache[fontSize] = font;
 
         return font;
     }
-
-
 }

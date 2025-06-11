@@ -1,22 +1,15 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing.Generator;
+﻿namespace Una.Drawing.Generator;
 
 internal class GradientGenerator : IGenerator
 {
     public int RenderOrder => 1;
 
-    public bool Generate(SKCanvas canvas, Node node)
+    public bool Generate(SKCanvas canvas, Node node, Vector2 origin)
     {
         ComputedStyle style = node.ComputedStyle;
         Size          size  = node.Bounds.PaddingSize;
 
-        if (null == style.BackgroundGradient || style.BackgroundGradient.IsEmpty) return false;
+        if (null == style.BackgroundGradient || style.BackgroundGradient.Value.IsEmpty) return false;
 
         EdgeSize inset = style.BackgroundGradientInset;
 
@@ -25,27 +18,35 @@ internal class GradientGenerator : IGenerator
 
         paint.IsAntialias = true;
         paint.Style       = SKPaintStyle.Fill;
-        paint.Shader      = CreateShader(size, style.BackgroundGradient, inset);
+        paint.Shader      = CreateShader(size, style.BackgroundGradient.Value, inset);
 
-        if (style.BorderRadius == 0) {
-            canvas.DrawRect(rect, paint);
+        int saveCount = canvas.Save();
+        try {
+            canvas.Translate(origin.X, origin.Y);
+            
+            if (style.BorderRadius == 0) {
+                canvas.DrawRect(rect, paint);
+                return true;
+            }
+
+            var radius = (float)style.BorderRadius;
+
+            RoundedCorners corners     = style.RoundedCorners;
+            SKPoint        topLeft     = corners.HasFlag(RoundedCorners.TopLeft) ? new(radius, radius) : new(0, 0);
+            SKPoint        topRight    = corners.HasFlag(RoundedCorners.TopRight) ? new(radius, radius) : new(0, 0);
+            SKPoint        bottomRight = corners.HasFlag(RoundedCorners.BottomRight) ? new(radius, radius) : new(0, 0);
+            SKPoint        bottomLeft  = corners.HasFlag(RoundedCorners.BottomLeft) ? new(radius, radius) : new(0, 0);
+
+            using SKRoundRect roundRect = new SKRoundRect(rect, radius, radius);
+
+            roundRect.SetRectRadii(rect, [topLeft, topRight, bottomRight, bottomLeft]);
+            canvas.DrawRoundRect(roundRect, paint);
+
             return true;
+        } finally {
+            canvas.RestoreToCount(saveCount);
+            paint.Shader?.Dispose();
         }
-
-        var radius = (float)style.BorderRadius;
-
-        RoundedCorners corners     = style.RoundedCorners;
-        SKPoint        topLeft     = corners.HasFlag(RoundedCorners.TopLeft) ? new(radius, radius) : new(0, 0);
-        SKPoint        topRight    = corners.HasFlag(RoundedCorners.TopRight) ? new(radius, radius) : new(0, 0);
-        SKPoint        bottomRight = corners.HasFlag(RoundedCorners.BottomRight) ? new(radius, radius) : new(0, 0);
-        SKPoint        bottomLeft  = corners.HasFlag(RoundedCorners.BottomLeft) ? new(radius, radius) : new(0, 0);
-
-        using SKRoundRect roundRect = new SKRoundRect(rect, radius, radius);
-
-        roundRect.SetRectRadii(rect, [topLeft, topRight, bottomRight, bottomLeft]);
-        canvas.DrawRoundRect(roundRect, paint);
-
-        return true;
     }
 
     private static SKShader CreateShader(Size size, GradientColor gradientColor, EdgeSize inset)

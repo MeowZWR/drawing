@@ -1,10 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
+﻿using System.Collections.Immutable;
 using System.Linq;
 
 namespace Una.Drawing;
@@ -28,7 +22,7 @@ public partial class Node
             return cachedNode;
         }
 
-        var querySelectors = QuerySelectorParser.Parse(querySelectorString);
+        var querySelectors = QuerySelectorParser.Parse(querySelectorString, true);
 
         foreach (var querySelector in querySelectors) {
             Node? node = FindChildrenMatching(this, querySelector, true).FirstOrDefault();
@@ -51,7 +45,7 @@ public partial class Node
             return cachedNode;
         }
 
-        foreach (var child in _childNodes) {
+        foreach (var child in _childNodes.ToImmutableArray()) {
             var node = child.FindById(nodeId);
 
             if (node != null) {
@@ -107,7 +101,15 @@ public partial class Node
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public IEnumerable<T> QuerySelectorAll<T>(string querySelectorString) where T : Node
     {
-        return QuerySelectorAll(querySelectorString).Cast<T>().ToList();
+        List<T> nodeList = [];
+
+        foreach (var node in QuerySelectorAll(querySelectorString)) {
+            if (node is T tNode) {
+                nodeList.Add(tNode);
+            }
+        }
+
+        return nodeList;
     }
 
     /// <summary>
@@ -155,7 +157,7 @@ public partial class Node
             nodeListResult.Add(child);
         }
 
-        if (recursive && (querySelector.IsFirstSelector || nodeListResult.Count == 0)) {
+        if (recursive && (querySelector.Parent == null || nodeListResult.Count == 0)) {
             for (int i = 0; i < childCount; i++) {
                 nodeListResult.AddRange(FindChildrenMatching(childNodes[i], querySelector, true));
             }

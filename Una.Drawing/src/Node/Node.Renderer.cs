@@ -1,16 +1,11 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using System.Linq;
-using System.Threading.Tasks;
-using Dalamud.Interface.Textures.TextureWraps;
+﻿using Dalamud.Interface.Textures.TextureWraps;
 using ImGuiNET;
 using Lumina.Misc;
 using System.Collections.Immutable;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Una.Drawing.Font;
 using Una.Drawing.Texture;
 
 namespace Una.Drawing;
@@ -70,7 +65,7 @@ public partial class Node
     /// <remarks>
     /// Only applicable when <see cref="Overflow"/> is set to <c>false</c>.
     /// </remarks>
-    public uint ScrollX { get; private set; }
+    public float ScrollX { get; private set; }
 
     /// <summary>
     /// Represents the current vertical scroll position of the node.
@@ -78,7 +73,7 @@ public partial class Node
     /// <remarks>
     /// Only applicable when <see cref="Overflow"/> is set to <c>false</c>.
     /// </remarks>
-    public uint ScrollY { get; private set; }
+    public float ScrollY { get; private set; }
 
     /// <summary>
     /// Represents the current width of the scroll area of the node.
@@ -86,7 +81,7 @@ public partial class Node
     /// <remarks>
     /// Only applicable when <see cref="Overflow"/> is set to <c>false</c>.
     /// </remarks>
-    public uint ScrollWidth { get; private set; }
+    public float ScrollWidth { get; private set; }
 
     /// <summary>
     /// Represents the current height of the scroll area of the node.
@@ -94,22 +89,34 @@ public partial class Node
     /// <remarks>
     /// Only applicable when <see cref="Overflow"/> is set to <c>false</c>.
     /// </remarks>
-    public uint ScrollHeight { get; private set; }
+    public float ScrollHeight { get; private set; }
 
+    public double DrawDeltaTime { get; private set; }
+    public double DrawTotalTime { get; private set; }
+
+    /// <summary>
+    /// A deterministic hash code based on the node's value and layout.
+    /// Used for caching purposes by the renderer.
+    /// </summary>
+    internal int RenderHash { get; private set; }
+
+    private int  _previousRenderHash;
     private uint _colorThemeVersion;
+    private bool _mustRepaint;
 
     private          IDalamudTextureWrap? _texture;
-    private          NodeSnapshot         _snapshot;
     private readonly List<ImDrawListPtr>  _drawLists = [];
 
-    public void Render(ImDrawListPtr drawList, Point position, bool forceSynchronousStyleComputation = false)
+    public void Render(ImDrawListPtr drawList, Vector2 position, bool forceSynchronousStyleComputation = false)
     {
         if (IsDisposed) return;
 
         if (ParentNode is not null)
             throw new InvalidOperationException("Cannot render a node that has a parent or is not a root node.");
 
-        if (!_mustReflow && _hasComputedStyle && !forceSynchronousStyleComputation && UseThreadedStyleComputation) {
+        lock (_tagsList) InheritTagsFromParent();
+
+        if (!forceSynchronousStyleComputation && UseThreadedStyleComputation) {
             Task.Run(ComputeStyle);
         } else {
             ComputeStyle();
@@ -117,6 +124,10 @@ public partial class Node
 
         if (!_isUpdatingStyle) {
             ComputedStyle = _intermediateStyle;
+        }
+
+        if (IsInWindowDrawList(drawList)) {
+            position = ImGui.GetCursorScreenPos() + position;
         }
 
         lock (_lockObject) {
@@ -133,18 +144,50 @@ public partial class Node
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Draw(ImDrawListPtr drawList)
     {
+        if (IsDisposed) return;
+
+        if (!_previousSize.Equals(Bounds.ContentSize)) {
+            _previousSize = Bounds.ContentSize;
+            _mustRepaint  = true;
+        }
+
+        if (_causedReflow) {
+            _causedReflow = false;
+            if (DrawDebugPaintAndReflowBoxes) {
+                ImGui.GetForegroundDrawList().AddRect(Bounds.MarginRect.TopLeft, Bounds.MarginRect.BottomRight, 0x80FF00FF, 0f, ImDrawFlags.None, 2.0f);
+            }
+        }
+        
+        TrackNodeRef(this);
+        CheckDroppableNode();
+
+        if (DrawTotalTime == 0) {
+            DrawTotalTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            DrawDeltaTime = 0;
+        } else {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            DrawDeltaTime = now - DrawTotalTime;
+            DrawTotalTime = now;
+        }
+
+        _metricStopwatch.Restart();
         BeforeDraw?.Invoke(this);
 
         if (Color.ThemeVersion != _colorThemeVersion) {
             _colorThemeVersion = Color.ThemeVersion;
-            _texture?.Dispose();
-            _texture           = null;
+            _mustRepaint       = true;
         }
 
-        if (Style.IsVisible is false) return;
+        if (Style.IsVisible is false) {
+            DrawTime = _metricStopwatch.Elapsed.TotalMilliseconds;
+            _metricStopwatch.Stop();
+            return;
+        }
 
-        if (!IsVisible) {
+        if (!IsVisible || !_hasComputedStyle) {
             _isVisibleSince = 0;
+            DrawTime        = _metricStopwatch.Elapsed.TotalMilliseconds;
+            _metricStopwatch.Stop();
             return;
         }
 
@@ -156,34 +199,47 @@ public partial class Node
 
         if (UpdateTexture()) RenderShadow(drawList);
 
+        Vector2 topLeft     = Bounds.PaddingRect.TopLeft;
+        Vector2 bottomRight = Bounds.PaddingRect.BottomRight;
+        Vector2 offset      = new(32, 32);
+
         if (null != _texture) {
             drawList.AddImage(
                 _texture.ImGuiHandle,
-                Bounds.PaddingRect.TopLeft,
-                Bounds.PaddingRect.BottomRight,
+                topLeft - offset,
+                bottomRight + offset,
                 Vector2.Zero,
                 Vector2.One,
                 GetRenderColor()
             );
         }
 
-        DrawDebugBounds();
-
         ImDrawListPtr? childDrawList = _drawLists.LastOrDefault();
-        if (null == childDrawList) return;
+        if (null == childDrawList) {
+            DrawTime = _metricStopwatch.Elapsed.TotalMilliseconds;
+            _metricStopwatch.Stop();
+            return;
+        }
 
-        OnDraw(childDrawList.Value);
+        if (!IsDisposed) {
+            OnDraw(childDrawList.Value);
 
-        foreach (var childNode in ChildNodes.ToImmutableArray()) {
-            childNode.Draw(childDrawList.Value);
+            foreach (var childNode in _childNodes.ToImmutableArray()) {
+                childNode.Draw(childDrawList.Value);
+            }
         }
 
         EndInteractive();
         EndOverflowContainer();
 
         AfterDraw?.Invoke(this);
-
         PopDrawList();
+
+        _previousRenderHash = RenderHash;
+
+        DrawTime = _metricStopwatch.Elapsed.TotalMilliseconds;
+        _metricStopwatch.Stop();
+        DrawDebugBounds(drawList);
     }
 
     private bool UpdateTexture()
@@ -193,19 +249,33 @@ public partial class Node
             return false;
         }
 
-        NodeSnapshot snapshot     = CreateSnapshot();
-        bool         hasDrawables = ComputedStyle.HasDrawables() || NodeValue != null;
+        bool hasDrawables = ComputedStyle.HasDrawables() || NodeValue != null;
 
-        if (hasDrawables && ((_texture is null || !snapshot.Equals(ref _snapshot)) && Width > 0 && Height > 0)) {
+        if (_mustRepaint && hasDrawables && Width > 0 && Height > 0) {
+            Vector2 padding = new(64, 64); // Optimization point: Only add padding when needed.
+
             _texture?.Dispose();
-            _texture  = Renderer.CreateTexture(this);
-            _snapshot = snapshot;
+            _texture = Renderer.CreateTexture(this, padding);
+
             _consecutiveRedraws++;
+
+            if (DrawDebugPaintAndReflowBoxes) {
+                ImGui.GetForegroundDrawList().AddRect(
+                    Bounds.PaddingRect.TopLeft,
+                    Bounds.PaddingRect.BottomRight,
+                    0xA000FFFF,
+                    0f,
+                    ImDrawFlags.RoundCornersNone,
+                    3.0f
+                );
+            }
         } else {
             _consecutiveRedraws = 0;
         }
 
-        if (_consecutiveRedraws > 30) {
+        _mustRepaint = false;
+
+        if (_consecutiveRedraws > 3000) {
             DebugLogger.Log(
                 $"WARNING: Node {this} is redrawing on every frame (value={_nodeValue}). Please check for unnecessary state changes."
             );
@@ -228,26 +298,28 @@ public partial class Node
     {
         if (Overflow) return;
 
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding,      new Vector2(0, 0));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding,     new Vector2(0, 0));
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize,   0);
-        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding,     ComputedStyle.BorderRadius);
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,     ComputedStyle.BorderRadius);
-        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarSize,     10);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(0, 0));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(0, 0));
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0);
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, ComputedStyle.BorderRadius);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, ComputedStyle.BorderRadius);
+        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarSize, 10);
         ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, 0);
-        ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize,   0);
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, 0);
 
-        ImGui.PushStyleColor(ImGuiCol.FrameBg,              0);
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarBg,          ComputedStyle.ScrollbarTrackColor.ToUInt());
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab,        ComputedStyle.ScrollbarThumbColor.ToUInt());
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive,  ComputedStyle.ScrollbarThumbActiveColor.ToUInt());
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, 0);
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarBg, ComputedStyle.ScrollbarTrackColor.ToUInt());
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab, ComputedStyle.ScrollbarThumbColor.ToUInt());
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive, ComputedStyle.ScrollbarThumbActiveColor.ToUInt());
         ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabHovered, ComputedStyle.ScrollbarThumbHoverColor.ToUInt());
 
-        ImGui.SetCursorScreenPos(Bounds.PaddingRect.TopLeft);
+        ImGui.SetCursorScreenPos(Bounds.ContentRect.TopLeft);
+
+        uint frameId = Id != null ? Crc32.Get(Id) : InternalIdCrc32;
 
         ImGui.BeginChildFrame(
-            InternalIdCrc32,
-            Bounds.PaddingSize.ToVector2() + new Vector2(1, 0),
+            frameId,
+            Bounds.PaddingSize.ToVector2() - new Vector2(0, ComputedStyle.Padding.VerticalSize),
             (HorizontalScrollbar ? ImGuiWindowFlags.HorizontalScrollbar : ImGuiWindowFlags.None)
         );
 
@@ -266,8 +338,17 @@ public partial class Node
 
         Vector2 pos = ImGui.GetCursorScreenPos();
 
-        foreach (var child in _childNodes) {
-            child.ComputeBoundingRects(new((int)pos.X, (int)pos.Y));
+        var x = pos.X;
+        var y = pos.Y;
+
+        foreach (var child in _childNodes.ToImmutableArray()) {
+            Layout.OverridePositionsOf(child, new Vector2(x, y));
+
+            if (ComputedStyle.Flow == Flow.Vertical) {
+                y += child.Bounds.MarginSize.Height + ComputedStyle.Gap;
+            } else {
+                x += child.Bounds.MarginSize.Width + ComputedStyle.Gap;
+            }
         }
     }
 
@@ -276,12 +357,11 @@ public partial class Node
     {
         if (Overflow) return;
 
-        var totalSize = GetTotalSizeOfChildren(_childNodes);
-        var maxSize   = GetMaxSizeOfChildren(_childNodes);
+        (Size total, Size max) = GetTotalChildrenSize();
 
         Vector2 size = new(
-            ComputedStyle.Flow == Flow.Horizontal ? totalSize.Width : maxSize.Width,
-            ComputedStyle.Flow == Flow.Vertical ? totalSize.Height : maxSize.Height
+            ComputedStyle.Flow == Flow.Horizontal ? total.Width : max.Width,
+            ComputedStyle.Flow == Flow.Vertical ? total.Height : max.Height
         );
 
         ImGui.SetCursorPos(size);
@@ -331,7 +411,7 @@ public partial class Node
         uint color = GetRenderColor();
         if (color == 0) return;
 
-        var rect = Bounds.PaddingRect.Copy();
+        var rect = Bounds.MarginRect.Copy();
 
         if (ComputedStyle.ShadowInset > 0) rect.Shrink(new(ComputedStyle.ShadowInset));
 
@@ -411,22 +491,76 @@ public partial class Node
     {
         _drawLists.RemoveAt(_drawLists.Count - 1);
     }
+
+    private (Size, Size) GetTotalChildrenSize()
+    {
+        float totalWidth  = 0;
+        float maxWidth    = 0;
+        float totalHeight = 0;
+        float maxHeight   = 0;
+
+        lock (_childNodes) {
+            foreach (var child in _childNodes) {
+                Size sz = child.Bounds.MarginSize;
+
+                totalWidth  += sz.Width;
+                totalHeight += sz.Height;
+                maxWidth    =  MathF.Max(maxWidth, sz.Width);
+                maxHeight   =  MathF.Max(maxHeight, sz.Height);
+            }
+
+            // Account for the gap between children.
+            if (ComputedStyle.Flow == Flow.Horizontal) {
+                totalWidth += (_childNodes.Count - 1) * ComputedStyle.Gap;
+            } else {
+                totalHeight += (_childNodes.Count - 1) * ComputedStyle.Gap;
+            }
+        }
+
+        return (new(totalWidth, totalHeight), new(maxWidth, maxHeight));
+    }
+
+    private void RenderDragGhost()
+    {
+        if (null == _texture) return;
+
+        Vector2       topLeft     = Bounds.PaddingRect.TopLeft + DragDelta;
+        Vector2       bottomRight = Bounds.PaddingRect.BottomRight + DragDelta;
+        ImDrawListPtr ptr         = ImGui.GetForegroundDrawList();
+        Vector2       offset      = new(32, 32);
+
+        ptr.AddImage(
+            _texture.ImGuiHandle,
+            topLeft - offset,
+            bottomRight + offset,
+            Vector2.Zero,
+            Vector2.One,
+            0xA0FFFFFF
+        );
+    }
 }
 
-[StructLayout(LayoutKind.Sequential)]
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
 internal struct NodeSnapshot
 {
-    internal int                 Width;
-    internal int                 Height;
-    internal int                 ValueWidth;
-    internal int                 ValueHeight;
+    internal float               Width;
+    internal float               Height;
+    internal float               ValueWidth;
+    internal float               ValueHeight;
     internal LayoutStyleSnapshot Layout;
     internal PaintStyleSnapshot  Paint;
 
     internal bool Equals(ref readonly NodeSnapshot other)
     {
         return MemoryMarshal
-            .AsBytes(new ReadOnlySpan<NodeSnapshot>(in this))
-            .SequenceEqual(MemoryMarshal.AsBytes(new ReadOnlySpan<NodeSnapshot>(in other)));
+              .AsBytes(new ReadOnlySpan<NodeSnapshot>(in this))
+              .SequenceEqual(MemoryMarshal.AsBytes(new ReadOnlySpan<NodeSnapshot>(in other)));
+    }
+
+    public override int GetHashCode()
+    {
+        HashCode hash = new();
+        hash.AddBytes(MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in this), 1)));
+        return hash.ToHashCode();
     }
 }

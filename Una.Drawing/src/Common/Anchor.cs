@@ -1,11 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing;
+﻿namespace Una.Drawing;
 
 public class Anchor(Anchor.AnchorPoint point)
 {
@@ -26,11 +19,12 @@ public class Anchor(Anchor.AnchorPoint point)
     public Vector2 GetOffset(Vector2 size)
     {
         return Point switch {
+            AnchorPoint.None         => Vector2.Zero,
             AnchorPoint.TopLeft      => new(0, 0),
             AnchorPoint.TopCenter    => new(-size.X / 2, 0),
             AnchorPoint.TopRight     => new(-size.X, 0),
-            AnchorPoint.MiddleLeft   => new(0, -size.Y       / 2),
-            AnchorPoint.MiddleCenter => new(-size.X          / 2, -size.Y / 2),
+            AnchorPoint.MiddleLeft   => new(0, -size.Y / 2),
+            AnchorPoint.MiddleCenter => new(-size.X / 2, -size.Y / 2),
             AnchorPoint.MiddleRight  => new(-size.X, -size.Y / 2),
             AnchorPoint.BottomLeft   => new(0, -size.Y),
             AnchorPoint.BottomCenter => new(-size.X / 2, -size.Y),
@@ -93,15 +87,15 @@ public class Anchor(Anchor.AnchorPoint point)
     public static bool operator !=(Anchor      left, Anchor      right) => left.Point != right.Point;
     public static bool operator ==(Anchor      left, AnchorPoint right) => left.Point == right;
     public static bool operator !=(Anchor      left, AnchorPoint right) => left.Point != right;
-    public static bool operator ==(AnchorPoint left, Anchor      right) => left       == right.Point;
-    public static bool operator !=(AnchorPoint left, Anchor      right) => left       != right.Point;
+    public static bool operator ==(AnchorPoint left, Anchor      right) => left == right.Point;
+    public static bool operator !=(AnchorPoint left, Anchor      right) => left != right.Point;
 
     public override bool Equals(object? obj) =>
         (obj is Anchor a && a.Point == Point) || (obj is AnchorPoint p && p == Point);
 
     public override int GetHashCode() => Point.GetHashCode();
 
-    public enum AnchorPoint
+    public enum AnchorPoint : byte
     {
         None,
         TopLeft,
@@ -113,5 +107,10 @@ public class Anchor(Anchor.AnchorPoint point)
         BottomLeft,
         BottomCenter,
         BottomRight
+    }
+
+    public override string ToString()
+    {
+        return Point.ToString();
     }
 }

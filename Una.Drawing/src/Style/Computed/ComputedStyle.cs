@@ -1,9 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
+﻿using Dalamud.Game.Text.SeStringHandling;
 
 namespace Una.Drawing;
 
@@ -13,25 +8,41 @@ public partial struct ComputedStyle
     /// <inheritdoc cref="Style.IsVisible"/>
     public bool IsVisible;
 
+    /// <inheritdoc cref="Style.TransitionDuration"/>
+    public uint TransitionDuration;
+    
+    /// <inheritdoc cref="Style.TransitionType"/>
+    public TransitionType TransitionType;
+    
+    /// <inheritdoc cref="Style.TransitionAddClass"/>
+    public string? TransitionAddClass;
+    
+    /// <inheritdoc cref="Style.TransitionRemoveClass"/>
+    public string? TransitionRemoveClass;
+    
     /// <inheritdoc cref="Style.Anchor"/>
     public Anchor Anchor;
 
     /// <inheritdoc cref="Style.Size"/>
     public Size Size;
+    
+    /// <inheritdoc cref="Style.AutoSize"/>
+    public (AutoSize Horizontal, AutoSize Vertical) AutoSize;
 
     /// <inheritdoc cref="Style.Flow"/>
     public Flow Flow;
+    
+    /// <inheritdoc cref="Style.FlowOrder"/>
+    public FlowOrder FlowOrder;
 
     /// <inheritdoc cref="Style.Gap"/>
-    public int Gap;
+    public float Gap;
 
     /// <inheritdoc cref="Style.Padding"/>
     public EdgeSize Padding;
-
+    
     /// <inheritdoc cref="Style.Margin"/>
     public EdgeSize Margin;
-
-    public bool Stretch;
 
     /// <inheritdoc cref="Style.Color"/>
     public Color Color;
@@ -61,7 +72,7 @@ public partial struct ComputedStyle
     public bool TextOverflow;
 
     /// <inheritdoc cref="Style.MaxWidth"/>
-    public int? MaxWidth;
+    public float? MaxWidth;
 
     /// <inheritdoc cref="Style.BackgroundColor"/>
     public Color? BackgroundColor;
@@ -73,7 +84,7 @@ public partial struct ComputedStyle
     public EdgeSize BorderInset;
 
     /// <inheritdoc cref="Style.BorderRadius"/>
-    public int BorderRadius;
+    public float BorderRadius;
 
     /// <inheritdoc cref="Style.BorderWidth"/>
     public EdgeSize BorderWidth;
@@ -82,7 +93,7 @@ public partial struct ComputedStyle
     public Color? StrokeColor;
 
     /// <inheritdoc cref="Style.StrokeWidth"/>
-    public int StrokeWidth;
+    public float StrokeWidth;
 
     /// <inheritdoc cref="Style.StrokeInset"/>
     public float StrokeInset;
@@ -126,6 +137,12 @@ public partial struct ComputedStyle
     /// <inheritdoc cref="Style.TextShadowColor"/>
     public Color? TextShadowColor;
 
+    /// <inheritdoc cref="Style.DropShadow"/>
+    public Vector4 DropShadow;
+
+    /// <inheritdoc cref="Style.BitmapFontIcon"/>
+    public BitmapFontIcon? BitmapFontIcon;
+    
     /// <inheritdoc cref="Style.IconId"/>
     public uint? IconId;
 
@@ -143,6 +160,18 @@ public partial struct ComputedStyle
 
     /// <inheritdoc cref="Style.ImageRoundedCorners"/>
     public RoundedCorners ImageRoundedCorners;
+    
+    /// <inheritdoc cref="Style.ImageScaleMode"/>
+    public ImageScaleMode ImageScaleMode;
+    
+    /// <inheritdoc cref="Style.ImageTileMode"/>
+    public ImageTileMode ImageTileMode;
+
+    /// <inheritdoc cref="Style.ImageScale"/>
+    public float ImageScale;
+
+    /// <inheritdoc cref="Style.ImageBlur"/>
+    public Vector2 ImageBlur;
 
     /// <inheritdoc cref="Style.ImageGrayscale"/>
     public bool ImageGrayscale;
@@ -200,4 +229,21 @@ public partial struct ComputedStyle
 
     internal PaintStyleSnapshot  PaintStyleSnapshot;
     internal LayoutStyleSnapshot LayoutStyleSnapshot;
+
+    public int GetHash()
+    {
+        var hc = new HashCode();
+
+        hc.AddBytes(MemoryMarshal.CreateReadOnlySpan(
+            ref Unsafe.As<PaintStyleSnapshot, byte>(ref this.PaintStyleSnapshot),
+            Unsafe.SizeOf<PaintStyleSnapshot>()
+        ));
+        
+        hc.AddBytes(MemoryMarshal.CreateReadOnlySpan(
+            ref Unsafe.As<LayoutStyleSnapshot, byte>(ref this.LayoutStyleSnapshot),
+            Unsafe.SizeOf<LayoutStyleSnapshot>()
+        ));
+
+        return hc.ToHashCode();
+    }
 }

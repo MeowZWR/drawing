@@ -1,11 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using System.Linq;
+﻿using System.Linq;
 using Una.Drawing.Font;
 
 namespace Una.Drawing;
@@ -36,12 +29,10 @@ public static class FontRegistry
     /// </example>
     /// <param name="id"></param>
     /// <param name="fontFamily"></param>
-    /// <param name="weight"></param>
     /// <param name="sizeOffset"></param>
     public static void SetNativeFontFamily(
         uint              id,
         string            fontFamily,
-        SKFontStyleWeight weight     = SKFontStyleWeight.Normal, // TODO: Remove me.
         float             sizeOffset = 0
     )
     {

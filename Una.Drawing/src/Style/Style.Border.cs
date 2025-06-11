@@ -1,11 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing;
+﻿namespace Una.Drawing;
 
 public partial class Style
 {
@@ -29,7 +22,7 @@ public partial class Style
     /// <summary>
     /// Defines the roundness of the corners of the node.
     /// </summary>
-    public int? BorderRadius { get; set; }
+    public float? BorderRadius { get; set; }
 
     /// <summary>
     /// Defines the inset of the border around the node, allowing the border to
@@ -62,7 +55,7 @@ public partial class Style
     /// inset value.
     /// </para>
     /// </summary>
-    public int? StrokeWidth { get; set; }
+    public float? StrokeWidth { get; set; }
 
     /// <summary>
     /// Similar to <see cref="BorderInset"/>, this property defines the inset

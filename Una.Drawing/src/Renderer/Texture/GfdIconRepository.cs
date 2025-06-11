@@ -1,15 +1,10 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using Dalamud.Game.Text.SeStringHandling;
+﻿using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 
 namespace Una.Drawing.Texture;
 
-internal struct GfdIcon
+public struct GfdIcon
 {
     public SKImage Texture { get; set; }
     public Vector2 Uv0     { get; set; }
@@ -17,11 +12,13 @@ internal struct GfdIcon
     public Vector2 Size    { get; set; }
 }
 
-internal static class GfdIconRepository
+public static class GfdIconRepository
 {
-    private static byte[]?  GfdFileContents { get; set; }
-    private static SKImage? FontIconHandle  { get; set; }
+    private static          byte[]?      GfdFileContents { get; set; }
+    private static          SKImage?     FontIconHandle  { get; set; }
+    private static readonly SKColorSpace SkColorSpace = SKColorSpace.CreateSrgb();
 
+    private static Dictionary<BitmapFontIcon, IDalamudTextureWrap>  IconCache  { get; } = [];
     private static Dictionary<BitmapFontIcon, GfdFileView.GfdEntry> EntryCache { get; } = [];
 
     internal static void Setup()
@@ -37,7 +34,7 @@ internal static class GfdIconRepository
         GfdFileContents = null;
     }
 
-    internal static unsafe GfdIcon GetIcon(BitmapFontIcon icon)
+    public static unsafe GfdIcon GetIcon(BitmapFontIcon icon)
     {
         if (null == FontIconHandle || null == GfdFileContents) {
             throw new InvalidOperationException("GFD file or font icon texture not loaded.");
@@ -53,12 +50,54 @@ internal static class GfdIconRepository
             EntryCache[icon] = entry;
         }
 
-        return new() {
-            Texture = FontIconHandle,
-            Uv0     = new Vector2(entry.Left,               entry.Top + 170) * 2,
-            Uv1     = new Vector2(entry.Left + entry.Width, entry.Top + entry.Height + 170) * 2,
-            Size    = new(entry.Width, entry.Height)
+        return new() { Texture = FontIconHandle, Uv0 = new Vector2(entry.Left, entry.Top + 170) * 2, Uv1 = new Vector2(entry.Left + entry.Width, entry.Top + entry.Height + 170) * 2, Size = new(entry.Width, entry.Height) };
+    }
+
+    public static IDalamudTextureWrap? GetIconWrap(BitmapFontIcon bitmapFontIcon)
+    {
+        if (IconCache.TryGetValue(bitmapFontIcon, out var c)) {
+            return c;
+        }
+
+        GfdIcon icon = GetIcon(bitmapFontIcon);
+
+        int width  = (int)icon.Size.X;
+        int height = (int)icon.Size.Y;
+
+        if (width < 1 || height < 1) return null;
+
+        SKImageInfo info = new() {
+            Width      = width,
+            Height     = height,
+            AlphaType  = SKAlphaType.Premul,
+            ColorType  = SKColorType.Bgra8888,
+            ColorSpace = SkColorSpace,
         };
+
+        using SKSurface? surface = SKSurface.Create(info);
+
+        if (surface == null) {
+            DalamudServices.PluginLog.Warning($"Failed to create surface of size {width}x{height}.");
+            return null;
+        }
+
+        SKRect src = new(icon.Uv0.X, icon.Uv0.Y, icon.Uv1.X, icon.Uv1.Y);
+        SKRect dest = new(0, 0, width, height);
+
+        using SKCanvas canvas = surface.Canvas;
+        canvas.DrawImage(icon.Texture, src, dest);
+
+        using SKImage  image  = surface.Snapshot();
+        using SKPixmap pixmap = image.PeekPixels();
+
+        byte[] data = new byte[pixmap.Width * pixmap.Height * 4];
+        Marshal.Copy(pixmap.GetPixels(), data, 0, data.Length);
+
+        var texture = DalamudServices.TextureProvider.CreateFromRaw(RawImageSpecification.Rgba32(width, height), pixmap.GetPixelSpan());
+
+        IconCache[bitmapFontIcon] = texture;
+
+        return texture;
     }
 
     // From Kizer: https://github.com/Soreepeong/Dalamud/blob/feature/log-wordwrap/Dalamud/Interface/Spannables/Internal/GfdFileView.cs
@@ -140,7 +179,6 @@ internal static class GfdIconRepository
             return false;
         }
 
-
         /// <summary>Header of a .gfd file.</summary>
         [StructLayout(LayoutKind.Sequential)]
         internal struct GfdHeader
@@ -187,4 +225,11 @@ internal static class GfdIconRepository
             public bool IsEmpty => Width == 0 || Height == 0;
         }
     }
+}
+
+internal readonly struct GfdIconTexture(int width, int height, byte[] data)
+{
+    public int    Width  { get; } = width;
+    public int    Height { get; } = height;
+    public byte[] Data   { get; } = data;
 }

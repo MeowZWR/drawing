@@ -1,10 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
+﻿using Dalamud.Game.Text.SeStringHandling;
 using Lumina.Misc;
 
 namespace Una.Drawing;
@@ -25,13 +19,13 @@ internal struct PaintStyleSnapshot
     internal float              BorderInsetRight;
     internal float              BorderInsetBottom;
     internal float              BorderInsetLeft;
-    internal int                BorderRadius;
-    internal int                BorderTopWidth;
-    internal int                BorderRightWidth;
-    internal int                BorderBottomWidth;
-    internal int                BorderLeftWidth;
+    internal float              BorderRadius;
+    internal float              BorderTopWidth;
+    internal float              BorderRightWidth;
+    internal float              BorderBottomWidth;
+    internal float              BorderLeftWidth;
     internal uint?              StrokeColor;
-    internal int                StrokeWidth;
+    internal float              StrokeWidth;
     internal float              StrokeInset;
     internal float?             StrokeRadius;
     internal RoundedCorners?    RoundedCorners;
@@ -55,15 +49,21 @@ internal struct PaintStyleSnapshot
     internal uint?              OutlineColor;
     internal float              TextShadowSize;
     internal uint?              TextShadowColor;
+    internal Vector4?           DropShadow;
+    internal BitmapFontIcon?    BitmapFontIcon;
     internal uint?              IconId;
-    internal int?               ImageInsetTop;
-    internal int?               ImageInsetRight;
-    internal int?               ImageInsetBottom;
-    internal int?               ImageInsetLeft;
+    internal float?             ImageInsetTop;
+    internal float?             ImageInsetRight;
+    internal float?             ImageInsetBottom;
+    internal float?             ImageInsetLeft;
     internal float?             ImageOffsetX;
     internal float?             ImageOffsetY;
     internal float?             ImageRounding;
     internal RoundedCorners?    ImageRoundedCorners;
+    internal ImageScaleMode?    ImageScaleMode;
+    internal ImageTileMode?     ImageTileMode;
+    internal Vector2?           ImageBlur;
+    internal float?             ImageScale;
     internal bool?              ImageGrayscale;
     internal float?             ImageContrast;
     internal short?             ImageRotation;
@@ -77,8 +77,7 @@ internal struct PaintStyleSnapshot
 
     internal static PaintStyleSnapshot Create(ref ComputedStyle style)
     {
-        return new()
-        {
+        return new() {
             Color                         = style.Color.ToUInt(),
             TextAlign                     = style.TextAlign.Point,
             OutlineSize                   = style.OutlineSize,
@@ -122,6 +121,8 @@ internal struct PaintStyleSnapshot
             OutlineColor                  = style.OutlineColor?.ToUInt(),
             TextShadowSize                = style.TextShadowSize,
             TextShadowColor               = style.TextShadowColor?.ToUInt(),
+            DropShadow                    = style.DropShadow,
+            BitmapFontIcon                = style.BitmapFontIcon,
             IconId                        = style.IconId,
             ImageInsetTop                 = style.ImageInset?.Top,
             ImageInsetRight               = style.ImageInset?.Right,
@@ -131,6 +132,10 @@ internal struct PaintStyleSnapshot
             ImageOffsetY                  = style.ImageOffset?.Y,
             ImageRounding                 = style.ImageRounding,
             ImageRoundedCorners           = style.ImageRoundedCorners,
+            ImageScale                    = style.ImageScale,
+            ImageScaleMode                = style.ImageScaleMode,
+            ImageTileMode                 = style.ImageTileMode,
+            ImageBlur                     = style.ImageBlur,
             ImageGrayscale                = style.ImageGrayscale,
             ImageContrast                 = style.ImageContrast,
             ImageRotation                 = style.ImageRotation,
@@ -142,5 +147,13 @@ internal struct PaintStyleSnapshot
             UldPartId                     = style.UldPartId,
             UldStyle                      = style.UldStyle,
         };
+    }
+
+    public override int GetHashCode()
+    {
+        HashCode hash = new();
+        hash.AddBytes(MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in this), 1)));
+
+        return hash.ToHashCode();
     }
 }

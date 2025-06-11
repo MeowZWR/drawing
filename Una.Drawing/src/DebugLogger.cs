@@ -8,6 +8,11 @@ public static class DebugLogger
 
     public static void Log(string message)
     {
-        Writer?.Debug(message);
+        Writer?.Info(message);
+    }
+    
+    public static void Error(string message)
+    {
+        Writer?.Error(message);
     }
 }

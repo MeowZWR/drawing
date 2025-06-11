@@ -1,27 +1,10 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using System.Collections.Immutable;
-using System.Linq;
+﻿using System.Collections.Immutable;
 using System.Threading;
 
 namespace Una.Drawing;
 
 public partial class Node
 {
-    /// <summary>
-    /// Signals the listener that a property that affects the layout of this
-    /// node or any of its descendants been modified. This event can be
-    /// triggered multiple times during a single reflow operation. It is up
-    /// to the listener to keep track of the changes and perform the reflow
-    /// operation as efficiently as possible.
-    /// </summary>
-    public Action? OnReflow;
-
     /// <summary>
     /// Defines the properties that specify the visual representation of this
     /// element.
@@ -40,6 +23,9 @@ public partial class Node
         }
     }
 
+    /// <summary>
+    /// The stylesheet that defines the styles for this node and its children.
+    /// </summary>
     public Stylesheet? Stylesheet {
         get => _stylesheet ?? ParentNode?.Stylesheet;
         set {
@@ -49,18 +35,32 @@ public partial class Node
     }
 
     /// <summary>
+    /// A lookup table of query selectors of which the match result has been
+    /// performed and cached. This is used to avoid re-evaluating the same
+    /// query selector multiple times.
+    /// </summary>
+    /// <remarks>
+    /// This dictionary should be cleared on reflow to avoid stale results.
+    /// </remarks>
+    internal readonly Dictionary<QuerySelector, bool> CachedQuerySelectorResults = [];
+
+    /// <summary>
     /// Defines the final computed style of this node.
     /// </summary>
-    public ComputedStyle ComputedStyle;
+    public ComputedStyle ComputedStyle = ComputedStyleFactory.CreateDefault();
 
     private ComputedStyle _intermediateStyle;
     private Style         _style = new();
     private Stylesheet?   _stylesheet;
     private bool          _isUpdatingStyle;
-    private bool          _hasComputedStyle;
     private int           _computeStyleLock;
+    private Animation?    _animation;
+    private int           _lastStyleHash;
+    private int           _lastNodeValueHash;
+    private bool          _hasComputedStyle;
+    private bool          _causedReflow;
 
-    private readonly object _lockObject = new();
+    private readonly Lock _lockObject = new();
 
     public static bool UseThreadedStyleComputation { get; set; }
 
@@ -73,50 +73,95 @@ public partial class Node
 
         _isUpdatingStyle = true;
 
-        if (0 == Interlocked.Exchange(ref _computeStyleLock, 1)) {
-            lock (_lockObject) {
-                if (UseThreadedStyleComputation) {
-                    lock (TagsList) {
-                        InheritTagsFromParent();
-                    }
-                }
-
-                if (IsDisposed) return false;
-
-                var  style     = ComputedStyleFactory.Create(this);
-                int  result    = style.Commit(ref _intermediateStyle);
-                bool isUpdated = result > 0;
-
-                _intermediateStyle = style;
-
-                lock (_childNodes) {
-                    foreach (Node child in _childNodes.ToImmutableArray()) {
-                        if (!child.IsDisposed && child.ComputeStyle()) {
-                            isUpdated = true;
-                        }
-                    }
-                }
-
-                if (isUpdated) {
-                    ReassignAnchorNodes();
-                }
-
-                if (result is 1 or 3) SignalReflowRecursive();
-                if (result is 2 or 3) SignalRepaint();
-
-                ComputedStyle     = _intermediateStyle;
-                _isUpdatingStyle  = false;
-                _hasComputedStyle = true;
-
-
-                // Release lock.
-                Interlocked.Exchange(ref _computeStyleLock, 0);
-
-                return isUpdated;
-            }
+        if (0 != Interlocked.Exchange(ref _computeStyleLock, 1)) {
+            return false;
         }
 
-        return false;
+        lock (_lockObject) {
+            if (IsDisposed) return false;
+
+            (int hash, ComputedStyle style) = ComputedStyleFactory.Create(this);
+
+            if (_lastStyleHash != hash) {
+                _lastStyleHash = hash;
+
+                if (_animation is { IsPlaying: true }) {
+                    _animation = null;
+                }
+
+                _animation ??= _intermediateStyle.TransitionDuration > 0
+                    ? new Animation(_intermediateStyle, style)
+                    : null;
+            }
+
+            if (_animation is { IsPlaying: true }) {
+                style = _animation.Update(DrawDeltaTime);
+            }
+
+            if (_animation is { IsPlaying: false }) {
+                TransitionToConfiguredClass(ref style);
+                _animation = null;
+            } else if (_animation is null) {
+                TransitionToConfiguredClass(ref style);
+            }
+
+            ComputedStyle.CommitResult result = style.Commit(ref _intermediateStyle);
+
+            int  nodeValueHash   = NodeValue?.GetHashCode() ?? 0;
+            bool isLayoutUpdated = nodeValueHash != _lastNodeValueHash;
+
+            if (result.HasFlag(ComputedStyle.CommitResult.LayoutUpdated)) {
+                _causedReflow = true;
+            }
+
+            foreach (Node child in _childNodes.ToImmutableArray()) {
+                if (child.IsDisposed) continue;
+
+                if (child.ComputeStyle()) {
+                    result          |= ComputedStyle.CommitResult.LayoutUpdated;
+                    isLayoutUpdated =  true;
+                }
+            }
+
+            // Update snapshot.
+            _intermediateStyle                     = style;
+            _intermediateStyle.LayoutStyleSnapshot = LayoutStyleSnapshot.Create(ref _intermediateStyle);
+            _intermediateStyle.PaintStyleSnapshot  = PaintStyleSnapshot.Create(ref _intermediateStyle);
+            ComputedStyle                          = _intermediateStyle;
+            RenderHash                             = _intermediateStyle.GetHash();
+            _isUpdatingStyle                       = false;
+
+            if (result.HasFlag(ComputedStyle.CommitResult.LayoutUpdated)) {
+                SignalReflow();
+                isLayoutUpdated = true;
+            }
+
+            if (_previousRenderHash != RenderHash || _lastNodeValueHash != nodeValueHash) {
+                _mustRepaint = true;
+
+                _texture?.Dispose();
+                _texture = null;
+            }
+
+            // Release lock.
+            Interlocked.Exchange(ref _computeStyleLock, 0);
+
+            _lastNodeValueHash = nodeValueHash;
+            _hasComputedStyle  = true;
+
+            return isLayoutUpdated;
+        }
+    }
+
+    private void TransitionToConfiguredClass(ref ComputedStyle style)
+    {
+        if (style.TransitionAddClass != null) {
+            ToggleClass(style.TransitionAddClass, true);
+        }
+
+        if (style.TransitionRemoveClass != null) {
+            ToggleClass(style.TransitionRemoveClass, false);
+        }
     }
 
     /// <summary>
@@ -125,32 +170,29 @@ public partial class Node
     /// </summary>
     private void SignalReflow()
     {
-        OnReflow?.Invoke();
-        _mustReflow = true;
+        RootNode._mustReflow = true;
+        ReassignAnchorNodes();
     }
 
-    /// <summary>
-    /// Performs a recursive reflow to all ancestor nodes.
-    /// </summary>
-    private void SignalReflowRecursive(bool signalParent = true)
+    private void ClearCachedQuerySelectorsRecursively()
     {
-        _mustReflow = true;
+        lock (CachedQuerySelectorResults) {
+            CachedQuerySelectorResults.Clear();
+        }
 
-        if (signalParent) ParentNode?.SignalReflowRecursive();
-
-        if (_childNodes.Count > 0) {
-            foreach (Node child in _childNodes.ToImmutableArray()) {
-                child.SignalReflowRecursive(false);
+        try {
+            foreach (var node in _childNodes.ToImmutableArray()) {
+                node.ClearCachedQuerySelectorsRecursively();
             }
+        } catch (InvalidOperationException) {
+            // Collection was modified exception caused by ToImmutableArray
+            // might _rarely_ happen here. Safe to ignore since we'll reflow
+            // anyway if this happens.
         }
     }
 
-    /// <summary>
-    /// Forces a repaint of the texture for this node on the next frame.
-    /// </summary>
-    private void SignalRepaint()
+    private void ClearCachedQuerySelectors()
     {
-        _texture?.Dispose();
-        _texture = null;
+        RootNode.ClearCachedQuerySelectorsRecursively();
     }
 }

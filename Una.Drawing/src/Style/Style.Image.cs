@@ -1,9 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
+﻿using Dalamud.Game.Text.SeStringHandling;
 
 namespace Una.Drawing;
 
@@ -12,6 +7,10 @@ public partial class Style
     /// <summary>
     /// Draws a game icon in the node.
     /// </summary>
+    /// <remarks>
+    /// This value is mutually exclusive with <see cref="BitmapFontIcon"/>
+    /// and <see cref="UldResource"/> and its associated properties.
+    /// </remarks>
     public uint? IconId { get; set; }
 
     /// <summary>
@@ -67,22 +66,80 @@ public partial class Style
     public BlendMode? ImageBlendMode { get; set; }
 
     /// <summary>
+    /// The scale mode to apply to the image. Defaults to
+    /// <see cref="ImageScaleMode.Adapt"/>.
+    /// </summary>
+    public ImageScaleMode? ImageScaleMode { get; set; }
+    
+    /// <summary>
+    /// Specifies if the image should be clamped or repeated.
+    /// </summary>
+    public ImageTileMode? ImageTileMode { get; set; }
+
+    /// <summary>
+    /// Defines the scale of the image. Defaults to 1.0f.
+    /// </summary>
+    public float? ImageScale { get; set; }
+    
+    /// <summary>
+    /// Applies a gaussian blur to the image in the X and Y axis.
+    /// </summary>
+    public Vector2? ImageBlur { get; set; }
+    
+    /// <summary>
+    /// Defines the bitmap font icon to render.
+    /// </summary>
+    /// <remarks>
+    /// This value is mutually exclusive with <see cref="IconId"/> and
+    /// <see cref="UldResource"/> and its associated properties.
+    /// </remarks>
+    public BitmapFontIcon? BitmapFontIcon { get; set; }
+    
+    /// <summary>
     /// Defines the resource path of the ULD file to be displayed in the node.
     /// </summary>
+    /// <remarks>
+    /// This value is mutually exclusive with <see cref="IconId"/>
+    /// and <see cref="BitmapFontIcon"/>.
+    /// </remarks>
     public string? UldResource { get; set; }
 
     /// <summary>
     /// The ULD style to be displayed in the node.
     /// </summary>
+    /// <remarks>
+    /// This value is mutually exclusive with <see cref="IconId"/>
+    /// and <see cref="BitmapFontIcon"/>.
+    /// </remarks>
     public UldStyle? UldStyle { get; set; }
 
     /// <summary>
     /// Defines the ULD parts id to be displayed in the node.
     /// </summary>
+    /// <remarks>
+    /// This value is mutually exclusive with <see cref="IconId"/>
+    /// and <see cref="BitmapFontIcon"/>.
+    /// </remarks>
     public int? UldPartsId { get; set; }
 
     /// <summary>
     /// Defines the ULD part id to be displayed in the node.
     /// </summary>
+    /// <remarks>
+    /// This value is mutually exclusive with <see cref="IconId"/>
+    /// and <see cref="BitmapFontIcon"/>.
+    /// </remarks>
     public int? UldPartId { get; set; }
+    
+    /// <summary>
+    /// Adds a drop shadow to an image.
+    /// The elements of the vector are defined as follows:
+    /// <list type="bullet">
+    ///   <item>X: The X offset of the shadow.</item>
+    ///   <item>Y: The Y offset of the shadow.</item>
+    ///   <item>Z: The horizontal sigma of the shadow.</item>
+    ///   <item>W: The vertical sigma of the shadow.</item>
+    /// </list>
+    /// </summary>
+    public Vector4? DropShadow { get; set; }
 }

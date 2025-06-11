@@ -3,33 +3,32 @@
 internal partial class DynamicFont
 {
     private MeasuredText MeasureSingleLine(
-        string text,
+        object text,
         int    fontSize,
-        float  outlineSize,
         float  maxWidth,
         bool   textOverflow
     )
     {
-        List<Chunk> chunks = GenerateChunks(text);
-        float       width  = 0;
-        float       height = (int)Math.Ceiling(GetLineHeight(fontSize) + (outlineSize * 2.0f)) + 1;
-        var         buffer = string.Empty;
+        List<Chunk> chunks = GenerateChunks(text, fontSize);
+        List<Chunk> line   = [];
 
-        if (textOverflow || maxWidth == 0 || maxWidth == float.MaxValue) {
+        float width  = 0;
+        float height = GetLineHeight(fontSize);
+
+        if (textOverflow || maxWidth == 0 || maxWidth >= float.MaxValue - 1f) {
             foreach (var chunk in chunks) {
-                // Allow overflowing text over max width if specified.
-                width  += GetChunkWidth(chunk, fontSize);
-                buffer += chunk.Text;
+                width += chunk.Width;
+                line.Add(chunk);
             }
         } else {
             foreach (var chunk in chunks) {
                 if (BreakChunkAt(chunk, width, maxWidth, fontSize, out var result)) {
-                    width  += GetChunkWidth(result, fontSize);
-                    buffer += result.Text;
+                    width += chunk.Width;
+                    line.Add(result);
                 } else {
-                    buffer += result.Text;
-                    width  += GetChunkWidth(result, fontSize);
-                    width  =  Math.Min(width, maxWidth);
+                    width += chunk.Width;
+                    width =  MathF.Min(width, maxWidth);
+                    line.Add(result);
                     break;
                 }
             }
@@ -37,10 +36,6 @@ internal partial class DynamicFont
 
         if (maxWidth == 0) maxWidth = float.MaxValue;
 
-        return new() {
-            Lines     = [buffer],
-            Size      = new((int)Math.Min(maxWidth, Math.Ceiling(width + (outlineSize * 2.0f))), (int)height),
-            LineCount = 1,
-        };
+        return new() { Lines = [line.ToArray()], Size = new((int)MathF.Min(maxWidth, width), (int)height), LineCount = 1, };
     }
 }

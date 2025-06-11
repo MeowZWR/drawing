@@ -7,7 +7,7 @@ public class BackgroundImageGenerator : IGenerator
     public int RenderOrder => 1000;
 
     /// <inheritdoc/>
-    public bool Generate(SKCanvas canvas, Node node)
+    public bool Generate(SKCanvas canvas, Node node, Vector2 origin)
     {
         if (null == node.ComputedStyle.BackgroundImage) return false;
 
@@ -30,23 +30,23 @@ public class BackgroundImageGenerator : IGenerator
         SKMatrix matrix         = rotationMatrix.PreConcat(scaleMatrix);
 
         using var shader = image
-            .ToShader(SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, matrix)
-            .WithColorFilter(
-                SKColorFilter.CreateBlendMode(
-                    Color.ToSkColor(color),
-                    (SKBlendMode)node.ComputedStyle.BackgroundImageBlendMode
-                )
-            );
+                          .ToShader(SKShaderTileMode.Repeat, SKShaderTileMode.Repeat, matrix)
+                          .WithColorFilter(
+                               SKColorFilter.CreateBlendMode(
+                                   Color.ToSkColor(color),
+                                   (SKBlendMode)node.ComputedStyle.BackgroundImageBlendMode
+                               )
+                           );
 
         paint.Shader = shader;
 
         canvas.DrawRegion(
             new(
                 new SKRectI(
-                    inset.Left,
-                    inset.Top,
-                    size.Width - inset.Right,
-                    size.Height - inset.Bottom
+                    (int)inset.Left,
+                    (int)inset.Top,
+                    (int)(size.Width - inset.Right),
+                    (int)(size.Height - inset.Bottom)
                 )
             ),
             paint
@@ -57,8 +57,7 @@ public class BackgroundImageGenerator : IGenerator
 
     private static SKImage? LoadImage(object? image)
     {
-        return image switch
-        {
+        return image switch {
             byte[] bytes => TextureLoader.LoadFromBytes(bytes),
             uint iconId  => TextureLoader.LoadIcon(iconId),
             _            => null

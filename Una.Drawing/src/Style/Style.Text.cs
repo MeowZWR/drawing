@@ -1,11 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing;
+﻿namespace Una.Drawing;
 
 /// <summary>
 /// Defines the properties that specify the presentation of a node.
@@ -96,7 +89,7 @@ public partial class Style
     /// and higher than 0 will implicitly disable <see cref="TextOverflow"/>
     /// and <see cref="WordWrap"/>.
     /// </summary>
-    public int? MaxWidth { get; set; }
+    public float? MaxWidth { get; set; }
 
     /// <summary>
     /// <para>

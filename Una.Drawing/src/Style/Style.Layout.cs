@@ -1,11 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing;
+﻿namespace Una.Drawing;
 
 /// <summary>
 /// Defines the properties that specify the presentation of an element.
@@ -32,16 +25,14 @@ public partial class Style
     /// Defines the flow direction of the node.
     /// </summary>
     public Flow? Flow { get; set; }
-
+    
     /// <summary>
-    /// Stretches the node to fill the remaining space in the current flow. For
-    /// example, if the flow of the parent node is set to Vertical, the node
-    /// will stretch horizontally to fill the parent node, and vice versa.
+    /// Defines the render order of child elements.
     /// </summary>
-    public bool? Stretch { get; set; }
+    public FlowOrder? FlowOrder { get; set; }
 
     /// <summary>
     /// Defines the gap between nodes.
     /// </summary>
-    public int? Gap { get; set; }
+    public float? Gap { get; set; }
 }

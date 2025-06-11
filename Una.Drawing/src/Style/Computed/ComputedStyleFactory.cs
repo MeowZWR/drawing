@@ -1,32 +1,43 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-namespace Una.Drawing;
+﻿namespace Una.Drawing;
 
 internal static class ComputedStyleFactory
 {
-    internal static ComputedStyle Create(Node node)
+    internal static (int, ComputedStyle) Create(Node node)
     {
-        if (node.IsDisposed) return new();
+        if (node.IsDisposed) return (0, new());
 
         var computedStyle = CreateDefault();
+        var hashCode      = new HashCode();
 
-        if (node.Stylesheet is not null)
-        {
-            foreach ((Stylesheet.Rule rule, Style style) in node.Stylesheet.Rules)
-            {
-                if (rule.Matches(node)) { Apply(ref computedStyle, style); }
+        if (node.Stylesheet is not null) {
+            List<Stylesheet.Rule> matchingRules = [];
+
+            foreach (var rule in node.Stylesheet.Rules.Keys) {
+                if (rule.Matches(node)) {
+                    matchingRules.Add(rule);
+                }
+            }
+
+            matchingRules.Sort((a, b) => {
+                int specificityComparison = a.Specificity.CompareTo(b.Specificity);
+
+                return specificityComparison != 0
+                    ? specificityComparison
+                    : a.SourceOrderIndex.CompareTo(b.SourceOrderIndex);
+            });
+
+            foreach (var rule in matchingRules) {
+                Apply(ref computedStyle, node.Stylesheet.Rules[rule]);
+                hashCode.Add(rule.ToString());
             }
         }
 
         Apply(ref computedStyle, node.Style);
         ApplyScaleFactor(ref computedStyle);
 
-        return computedStyle;
+        hashCode.Add(node.Style);
+
+        return (hashCode.ToHashCode(), computedStyle);
     }
 
     /// <summary>
@@ -36,11 +47,16 @@ internal static class ComputedStyleFactory
     private static void Apply(ref ComputedStyle cs, in Style style)
     {
         cs.IsVisible                 = style.IsVisible ?? cs.IsVisible;
+        cs.TransitionDuration        = style.TransitionDuration ?? cs.TransitionDuration;
+        cs.TransitionType            = style.TransitionType ?? cs.TransitionType;
+        cs.TransitionAddClass        = style.TransitionAddClass ?? cs.TransitionAddClass;
+        cs.TransitionRemoveClass     = style.TransitionRemoveClass ?? cs.TransitionRemoveClass;
         cs.Anchor                    = style.Anchor ?? cs.Anchor;
         cs.Size                      = style.Size ?? cs.Size;
+        cs.AutoSize                  = style.AutoSize ?? cs.AutoSize;
         cs.Flow                      = style.Flow ?? cs.Flow;
+        cs.FlowOrder                 = style.FlowOrder ?? cs.FlowOrder;
         cs.Gap                       = style.Gap ?? cs.Gap;
-        cs.Stretch                   = style.Stretch ?? cs.Stretch;
         cs.Padding                   = style.Padding ?? cs.Padding;
         cs.Margin                    = style.Margin ?? cs.Margin;
         cs.Color                     = style.Color ?? cs.Color;
@@ -74,12 +90,18 @@ internal static class ComputedStyleFactory
         cs.OutlineColor              = style.OutlineColor ?? cs.OutlineColor;
         cs.TextShadowSize            = style.TextShadowSize ?? cs.TextShadowSize;
         cs.TextShadowColor           = style.TextShadowColor ?? cs.TextShadowColor;
+        cs.DropShadow                = style.DropShadow ?? cs.DropShadow;
+        cs.BitmapFontIcon            = style.BitmapFontIcon ?? cs.BitmapFontIcon;
         cs.IconId                    = style.IconId ?? cs.IconId;
         cs.ImageBytes                = style.ImageBytes ?? cs.ImageBytes;
         cs.ImageInset                = style.ImageInset ?? cs.ImageInset;
         cs.ImageOffset               = style.ImageOffset ?? cs.ImageOffset;
         cs.ImageRounding             = style.ImageRounding ?? cs.ImageRounding;
         cs.ImageRoundedCorners       = style.ImageRoundedCorners ?? cs.ImageRoundedCorners;
+        cs.ImageScaleMode            = style.ImageScaleMode ?? cs.ImageScaleMode;
+        cs.ImageTileMode             = style.ImageTileMode ?? cs.ImageTileMode;
+        cs.ImageScale                = style.ImageScale ?? cs.ImageScale;
+        cs.ImageBlur                 = style.ImageBlur ?? cs.ImageBlur;
         cs.ImageGrayscale            = style.ImageGrayscale ?? cs.ImageGrayscale;
         cs.ImageContrast             = style.ImageContrast ?? cs.ImageContrast;
         cs.ImageRotation             = style.ImageRotation ?? cs.ImageRotation;
@@ -107,7 +129,6 @@ internal static class ComputedStyleFactory
     {
         computedStyle.Size    *= Node.ScaleFactor;
         computedStyle.Padding *= Node.ScaleFactor;
-        computedStyle.Margin  *= Node.ScaleFactor;
 
         computedStyle.MaxWidth =
             computedStyle.MaxWidth != null ? (int)(computedStyle.MaxWidth * Node.ScaleFactor) : null;
@@ -121,8 +142,7 @@ internal static class ComputedStyleFactory
 
         computedStyle.BackgroundGradientInset *= Node.ScaleFactor;
 
-        if (Node.ScaleAffectsBorders)
-        {
+        if (Node.ScaleAffectsBorders) {
             computedStyle.BorderWidth *= Node.ScaleFactor;
             computedStyle.StrokeWidth =  (int)MathF.Ceiling(computedStyle.StrokeWidth * Node.ScaleFactor);
         }
@@ -143,16 +163,14 @@ internal static class ComputedStyleFactory
     /// </summary>
     internal static ComputedStyle CreateDefault()
     {
-        return new ComputedStyle
-        {
+        return new ComputedStyle {
             IsVisible                 = true,
             Anchor                    = Anchor.TopLeft,
             Size                      = new(),
             Flow                      = Flow.Horizontal,
+            FlowOrder                 = FlowOrder.Normal,
             Gap                       = 0,
-            Stretch                   = false,
             Padding                   = new(),
-            Margin                    = new(),
             Color                     = new(0xFFC0C0C0),
             Font                      = 0,
             FontSize                  = 12,
@@ -183,6 +201,8 @@ internal static class ComputedStyleFactory
             BackgroundImageBlendMode  = BlendMode.Modulate,
             TextShadowSize            = 0,
             TextShadowColor           = null,
+            DropShadow                = Vector4.Zero,
+            BitmapFontIcon            = null,
             IconId                    = null,
             ImageBytes                = null,
             ImageInset                = null,
@@ -194,6 +214,10 @@ internal static class ComputedStyleFactory
             ImageRotation             = 0,
             ImageColor                = new(0xFFFFFFFF),
             ImageBlendMode            = BlendMode.Modulate,
+            ImageTileMode             = ImageTileMode.Decal,
+            ImageScaleMode            = ImageScaleMode.Adapt,
+            ImageScale                = 1.0f,
+            ImageBlur                 = Vector2.Zero,
             UldResource               = null,
             UldPartId                 = null,
             UldPartsId                = null,

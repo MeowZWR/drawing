@@ -1,15 +1,8 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using System.Linq;
+﻿using System.Linq;
 
 namespace Una.Drawing;
 
-public class Color(byte r, byte g, byte b, float a = 1.0f)
+public struct Color(byte r, byte g, byte b, byte a = 255)
 {
     /// <summary>
     /// Specifies the name of this color.
@@ -23,17 +16,22 @@ public class Color(byte r, byte g, byte b, float a = 1.0f)
 
     private static readonly Dictionary<string, uint> NamedColors = [];
 
+    private byte _r = r;
+    private byte _g = g;
+    private byte _b = b;
+    private byte _a = a;
+
     /// <summary>
     /// Returns the red component of this color as a byte.
     /// </summary>
     public byte R {
-        set => r = value;
+        set => _r = value;
         get {
             if (Name != string.Empty && NamedColors.TryGetValue(Name, out uint color)) {
                 return (byte)(color >> 16);
             }
 
-            return r;
+            return _r;
         }
     }
 
@@ -41,13 +39,13 @@ public class Color(byte r, byte g, byte b, float a = 1.0f)
     /// Returns the green component of this color as a byte.
     /// </summary>
     public byte G {
-        set => g = value;
+        set => _g = value;
         get {
             if (Name != string.Empty && NamedColors.TryGetValue(Name, out uint color)) {
                 return (byte)(color >> 8);
             }
 
-            return g;
+            return _g;
         }
     }
 
@@ -55,27 +53,27 @@ public class Color(byte r, byte g, byte b, float a = 1.0f)
     /// Returns the blue component of this color as a byte.
     /// </summary>
     public byte B {
-        set => b = value;
+        set => _b = value;
         get {
             if (Name != string.Empty && NamedColors.TryGetValue(Name, out uint color)) {
                 return (byte)(color);
             }
 
-            return b;
+            return _b;
         }
     }
 
     /// <summary>
     /// Returns the alpha component of this color as a float.
     /// </summary>
-    public float A {
-        set => a = value;
+    public byte A {
+        set => _a = value;
         get {
             if (Name != string.Empty && NamedColors.TryGetValue(Name, out uint color)) {
-                return (color >> 24) / 255f;
+                return (byte)(color >> 24);
             }
 
-            return a;
+            return _a;
         }
     }
 
@@ -118,11 +116,15 @@ public class Color(byte r, byte g, byte b, float a = 1.0f)
             return color;
         }
 
-        return (uint)((byte)(A * 255) << 24 | R << 16 | G << 8 | B);
+        return (uint)(A << 24 | R << 16 | G << 8 | B);
     }
 
-    public Color(byte b, byte g, byte r, byte a) : this(b, g, r, a * 255) { }
+    public Color(byte r, byte g, byte b, float a) : this(r, g, b, (byte)(a / 255)) { }
 
+    /// <summary>
+    /// Constructs a color from a UInt32 value.
+    /// </summary>
+    /// <param name="color">The color value in 0xAABBGGRR format.</param>
     public Color(uint color) : this(
         (byte)((color >> 16) & 0xFF),
         (byte)((color >> 8) & 0xFF),
@@ -147,10 +149,12 @@ public class Color(byte r, byte g, byte b, float a = 1.0f)
     public static bool operator ==(Color? left, Color? right) => left is not null && left.Equals(right);
     public static bool operator !=(Color? left, Color? right) => !(left == right);
 
+    public Color Copy() => new(R, G, B, A);
+    
     internal static SKColor ToSkColor(Color? color)
     {
         return color is null
             ? SKColor.Empty
-            : new(color.R, color.G, color.B, (byte)(color.A * 255));
+            : new(color.Value.R, color.Value.G, color.Value.B, color.Value.A);
     }
 }

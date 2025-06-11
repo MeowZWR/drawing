@@ -1,11 +1,4 @@
-﻿/* Una.Drawing                                                 ____ ___
- *   A declarative drawing library for FFXIV.                 |    |   \____ _____        ____                _
- *                                                            |    |   /    \\__  \      |    \ ___ ___ _ _ _|_|___ ___
- * By Una. Licensed under AGPL-3.                             |    |  |   |  \/ __ \_    |  |  |  _| .'| | | | |   | . |
- * https://github.com/una-xiv/drawing                         |______/|___|  (____  / [] |____/|_| |__,|_____|_|_|_|_  |
- * ----------------------------------------------------------------------- \/ --- \/ ----------------------------- |__*/
-
-using System.Linq;
+﻿using System.Text;
 
 namespace Una.Drawing;
 
@@ -29,22 +22,79 @@ public class Stylesheet
         List<QuerySelector> results = QuerySelectorParser.Parse(query);
 
         foreach (var qs in results) {
-            // Don't allow nested selectors in a stylesheet. This is a
-            // deliberate design choice to keep performance high.
-            if (qs.DirectChild is not null || qs.NestedChild is not null)
-                throw new InvalidOperationException("A stylesheet rule declaration cannot have nested selectors.");
-
-            Rules.Add(new(qs), style);
+            Rules.Add(new(qs, Rules.Count), style);
         }
     }
 
-    internal class Rule(QuerySelector querySelector)
+    /// <summary>
+    /// Imports the rules from another stylesheet into this one.
+    /// </summary>
+    public void ImportFrom(Stylesheet other)
     {
+        foreach (var rule in other.Rules) {
+            Rules.Add(rule.Key, rule.Value);
+        }
+    }
+
+    /// <summary>
+    /// <para>
+    /// Returns a dictionary of all rules in this stylesheet.
+    /// </para>
+    /// <para>
+    /// Modifying this dictionary will not affect the original stylesheet.
+    /// </para>
+    /// </summary>
+    public Dictionary<string, Style> GetRuleList()
+    {
+        Dictionary<string, Style> rules = new();
+
+        foreach (var rule in Rules) {
+            string key = rule.Key.ToString();
+            if (!rules.ContainsKey(key)) {
+                rules.Add(key, rule.Value);
+            }
+        }
+
+        return rules;
+    }
+
+    internal class Rule(QuerySelector querySelector, int sourceOrderIndex)
+    {
+        public readonly int SourceOrderIndex = sourceOrderIndex;
+
+        public Specificity Specificity = Specificity.Calculate(querySelector.ToString());
+
+        public override string ToString()
+        {
+            return querySelector.ToString();
+        }
+
         public bool Matches(Node node)
         {
-            return (querySelector.Identifier is null || querySelector.Identifier.Equals(node.Id))
-                && querySelector.ClassList.All(className => node.ClassList.Contains(className))
-                && querySelector.TagList.All(className => node.TagsList.Contains(className));
+            return querySelector.Matches(node);
+        }
+    }
+
+    internal readonly struct Specificity(int idCount, int classTagCount) : IComparable<Specificity>
+    {
+        private readonly int _idCount       = idCount;
+        private readonly int _classTagCount = classTagCount;
+
+        public int CompareTo(Specificity other)
+        {
+            return _idCount != other._idCount 
+                ? _idCount.CompareTo(other._idCount) 
+                : _classTagCount.CompareTo(other._classTagCount);
+        }
+
+        public override string ToString() => $"({_idCount},{_classTagCount})";
+
+        public static Specificity Calculate(string selector)
+        {
+            var idCount       = selector.Split('#').Length - 1;
+            var classTagCount = (selector.Split('.').Length - 1) + (selector.Split(':').Length - 1);
+
+            return new Specificity(idCount, classTagCount);
         }
     }
 
@@ -52,5 +102,19 @@ public class Stylesheet
     {
         public string Query => query;
         public Style  Style => style;
+    }
+
+    public override string ToString()
+    {
+        var sb = new StringBuilder();
+
+        foreach (var rule in Rules) {
+            sb.AppendLine(rule.Key.ToString());
+            sb.AppendLine("{");
+            sb.AppendLine(rule.Value.ToString());
+            sb.AppendLine("}");
+        }
+
+        return sb.ToString();
     }
 }
