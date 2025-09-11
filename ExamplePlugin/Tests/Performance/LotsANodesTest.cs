@@ -1,4 +1,4 @@
-﻿using ImGuiNET;
+﻿using Dalamud.Bindings.ImGui;
 using Una.Drawing;
 
 namespace ExamplePlugin.Tests.Interaction;

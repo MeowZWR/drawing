@@ -37,7 +37,7 @@ internal static partial class Layout
 
         float visibleChildCount = 0; // Needed for correct gap calculation
 
-        foreach (Node child in node.ChildNodes.ToImmutableArray()) {
+        foreach (Node child in node.ChildNodes.ToArray()) {
             if (child.IsDisposed || !child.ComputedStyle.IsVisible) continue;
 
             ComputeFixedAndFitSizes(child);
@@ -108,12 +108,12 @@ internal static partial class Layout
         Flow crossAxis     = axis == Flow.Horizontal ? Flow.Vertical : Flow.Horizontal;
         bool mustStabilize = false;
 
-        foreach (List<Node> children in node.AnchorToChildNodes.Values.ToImmutableArray()) {
+        foreach (List<Node> children in node.AnchorToChildNodes.Values.ToArray()) {
             GrowChildrenAlongAxis(node, axis, children);
             GrowChildrenAlongCrossAxis(node, crossAxis, children);
         }
 
-        foreach (Node child in node.ChildNodes.ToImmutableArray()) {
+        foreach (Node child in node.ChildNodes.ToArray()) {
             if (ComputeGrowingSizes(child)) {
                 mustStabilize = true;
             }
@@ -147,15 +147,25 @@ internal static partial class Layout
 
         // Configure based on axis.
         if (axis == Flow.Horizontal) {
-            growableChildren = children.Where(n => n is
-                { IsDisposed: false, ComputedStyle: { AutoSize.Horizontal: AutoSize.Grow, IsVisible: true } }).ToList();
+            // Build growable children list without LINQ to avoid allocations.
+            growableChildren = new List<Node>();
+            foreach (var n in children) {
+                if (n is { IsDisposed: false, ComputedStyle: { AutoSize.Horizontal: AutoSize.Grow, IsVisible: true } }) {
+                    growableChildren.Add(n);
+                }
+            }
             getOuterSize      = n => n.OuterWidth;
             getPaddingSize    = cs => cs.Padding.HorizontalSize;
             getMarginSize     = cs => cs.Margin.HorizontalSize;
             parentContentSize = node.Bounds.ContentSize.Width;
         } else {
-            growableChildren = children.Where(n => n is
-                { IsDisposed: false, ComputedStyle: { AutoSize.Vertical: AutoSize.Grow, IsVisible: true } }).ToList();
+            // Build growable children list without LINQ to avoid allocations.
+            growableChildren = new List<Node>();
+            foreach (var n in children) {
+                if (n is { IsDisposed: false, ComputedStyle: { AutoSize.Vertical: AutoSize.Grow, IsVisible: true } }) {
+                    growableChildren.Add(n);
+                }
+            }
             getOuterSize      = n => n.OuterHeight;
             getPaddingSize    = cs => cs.Padding.VerticalSize;
             getMarginSize     = cs => cs.Margin.VerticalSize;
@@ -165,12 +175,27 @@ internal static partial class Layout
         // Abort if there is nothing to grow.
         if (growableChildren.Count == 0) return;
 
+        // Calculate space used by non-growable items and gaps without LINQ.
+        var growableSet = new System.Collections.Generic.HashSet<Node>(growableChildren);
+        float nonGrowableSize = 0f;
+        int visibleChildCount = 0;
+        foreach (var n in children) {
+            if (n is { IsDisposed: false, ComputedStyle.IsVisible: true }) {
+                if (!growableSet.Contains(n)) {
+                    nonGrowableSize += getOuterSize(n);
+                }
+                if (n.ComputedStyle.Anchor != Anchor.AnchorPoint.None) visibleChildCount++;
+            }
+        }
+
+        if (growableChildren.Count == 0) return;
+
         // Calculate space used by non-growable items and gaps.
-        float nonGrowableSize = children
+        nonGrowableSize = children
                                .Where(n => !growableChildren.Contains(n) && n is { IsDisposed: false, ComputedStyle.IsVisible: true })
                                .Sum(n => getOuterSize(n));
 
-        float visibleChildCount = children.Count(n => n is { IsDisposed: false, ComputedStyle.IsVisible: true } && n.ComputedStyle.Anchor != Anchor.AnchorPoint.None);
+        visibleChildCount = children.Count(n => n is { IsDisposed: false, ComputedStyle.IsVisible: true } && n.ComputedStyle.Anchor != Anchor.AnchorPoint.None);
         float totalGapSize      = children.Count > 1 ? gap * (visibleChildCount - 1) : 0;
 
         // Total space the growable items should collectively occupy.

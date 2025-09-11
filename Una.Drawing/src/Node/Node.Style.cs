@@ -1,4 +1,5 @@
 ﻿using System.Collections.Immutable;
+using System.Linq;
 using System.Threading;
 
 namespace Una.Drawing;
@@ -114,7 +115,7 @@ public partial class Node
                 _causedReflow = true;
             }
 
-            foreach (Node child in _childNodes.ToImmutableArray()) {
+            foreach (Node child in _childNodes.ToArray()) {
                 if (child.IsDisposed) continue;
 
                 if (child.ComputeStyle()) {
@@ -181,7 +182,7 @@ public partial class Node
         }
 
         try {
-            foreach (var node in _childNodes.ToImmutableArray()) {
+            foreach (var node in _childNodes.ToArray()) {
                 node.ClearCachedQuerySelectorsRecursively();
             }
         } catch (InvalidOperationException) {

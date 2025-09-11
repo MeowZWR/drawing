@@ -1,26 +1,38 @@
 ﻿using Dalamud.Game.Text.SeStringHandling;
-using System.Reflection;
+using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
+using Dalamud.Plugin.Services;
 using Lumina.Data.Files;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using TerraFX.Interop.DirectX;
 
 namespace Una.Drawing.Texture;
 
 internal static class TextureLoader
 {
-    private static readonly Dictionary<uint, TexFile>   IconToTexFileCache = [];
-    private static readonly Dictionary<uint, SKImage>   IconToImageCache   = [];
-    private static readonly Dictionary<string, TexFile> PathToTexFileCache = [];
-    private static readonly Dictionary<string, UldFile> PathToUldFileCache = [];
+    private static readonly Dictionary<uint, (TexFile iconFile, string iconPath)>     IconToTexFileCache = [];
+    private static readonly Dictionary<string, nint>                                  PathToBytePtrCache = [];
+    private static readonly Dictionary<string, (byte[] bytes, int height, int width)> PathToByteArrayCache = [];
+    private static readonly Dictionary<string, SKImage>                               PathToImageCache = [];
+    private static readonly Dictionary<uint, SKImage>                                 IconToImageCache = [];
+    private static readonly Dictionary<string, TexFile>                               PathToTexFileCache = [];
+    private static readonly Dictionary<string, UldFile>                               PathToUldFileCache = [];
 
     internal static void Dispose()
     {
         foreach (var (_, image) in IconToImageCache) image.Dispose();
+        foreach (var (_, image) in PathToImageCache) image.Dispose();
+        foreach (var (_, image) in PathToBytePtrCache) Marshal.FreeHGlobal(image);
 
         IconToImageCache.Clear();
         IconToTexFileCache.Clear();
         PathToTexFileCache.Clear();
         PathToUldFileCache.Clear();
+        PathToBytePtrCache.Clear();
+        PathToByteArrayCache.Clear();
+        PathToImageCache.Clear();
     }
 
     /// <summary>
@@ -56,26 +68,26 @@ internal static class TextureLoader
         if (uldFile == null)
             return null;
 
-        var    part    = uldFile.Parts.First(t => t.Id == partsId);
-        var    subPart = part.Parts[partId];
-        var    tex     = uldFile.AssetData.First(t => t.Id == subPart.TextureId).Path;
+        var part = uldFile.Parts.First(t => t.Id == partsId);
+        var subPart = part.Parts[partId];
+        var tex = uldFile.AssetData.First(t => t.Id == subPart.TextureId).Path;
         string texPath;
         fixed (char* p = tex)
             texPath = new string(p);
         var normalTexPath = texPath;
-        var scale         = 2;
+        var scale = 2;
         texPath = texPath[..^4] + "_hr1.tex";
         var texFile = LoadTexture(texPath.Replace("uld/", GetUldStyleString(style)));
         // failed to get hr version of texture? Fallback to normal
         if (texFile == null) {
-            scale   = 1;
+            scale = 1;
             texFile = LoadTexture(normalTexPath);
             // failed to get normal texture? Something is wrong with uld but ¯\_(ツ)_/¯ can't do much about that one so return null
             if (texFile == null)
                 return null;
         }
 
-        var uv   = new Vector2(subPart.U, subPart.V) * scale;
+        var uv = new Vector2(subPart.U, subPart.V) * scale;
         var size = new Vector2(subPart.W, subPart.H) * scale;
 
         return new UldIcon { Size = size, Texture = texFile, Rect = new Rect(uv, uv + size) };
@@ -96,17 +108,15 @@ internal static class TextureLoader
     }
 
     private static string GetUldStyleString(UldStyle style) => style switch {
-        UldStyle.Light           => "uld/light/",
-        UldStyle.Classic         => "uld/third/",
-        UldStyle.TransparentBlue => "uld/fourth/",
-        _                        => "uld/"
+        UldStyle.Default => "uld/",
+        _ => $"uld/img{(int)style:D2}" // UldStyle.Light is 1 and rest is up from there so this works for new naming scheme
     };
 
     internal static SKImage? LoadFromBytes(byte[] bytes)
     {
         using MemoryStream stream = new(bytes);
-        using SKImage      image  = SKImage.FromEncodedData(stream);
-        using SKBitmap     bitmap = SKBitmap.FromImage(image);
+        using SKImage image = SKImage.FromEncodedData(stream);
+        using SKBitmap bitmap = SKBitmap.FromImage(image);
 
         // We need to do some fuckery to swap from BGRA to RGBA...
         SKImageInfo info = new(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
@@ -124,9 +134,10 @@ internal static class TextureLoader
         if (IconToImageCache.TryGetValue(iconId, out SKImage? cachedImage)) return cachedImage;
 
         TexFile iconFile;
+        string iconPath;
 
         try {
-            iconFile = GetIconFile(iconId);
+            (iconFile, iconPath) = GetIconFile(iconId);
         } catch {
             // There are 3 reasons why this can fail and neither of them are
             // reasons for the plugin to crash:
@@ -140,31 +151,32 @@ internal static class TextureLoader
         // just return null as well.
         if (iconFile.Header.Width <= 0 || iconFile.Header.Height <= 0) return null;
 
-        SKImageInfo info = new(iconFile.Header.Width, iconFile.Header.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        try {
+            SKImage image = LoadImageFromTexOrPath(iconFile, iconPath) ?? throw new InvalidOperationException($"Failed to load icon {iconId}");
 
-        IntPtr pixelPtr = Marshal.AllocHGlobal(iconFile.ImageData.Length);
-        Marshal.Copy(iconFile.ImageData, 0, pixelPtr, iconFile.ImageData.Length);
+            IconToImageCache[iconId] = image;
 
-        using SKPixmap pixmap = new(info, pixelPtr);
-        SKImage?       image  = SKImage.FromPixels(pixmap);
-
-        IconToImageCache[iconId] = image;
-
-        return image;
+            return image;
+        } catch (Exception) {
+            // As of 07/08/2023, FFXIV introduced BC5/BC7 textures for some
+            // icons, which are currently unsupported by Lumia. This causes
+            // the ".imageData" getter on iconFile to throw an exception.
+            return null;
+        }
     }
 
     internal static SKImage? LoadGfdIcon(BitmapFontIcon fontIcon)
     {
         try {
-            GfdIcon  icon         = GfdIconRepository.GetIcon(fontIcon);
-            SKImage  atlas        = icon.Texture;
-            SKRectI  uv           = new((int)icon.Uv0.X, (int)icon.Uv0.Y, (int)icon.Uv1.X, (int)icon.Uv1.Y);
-            
-            int width  = uv.Right - uv.Left;
+            GfdIcon icon = GfdIconRepository.GetIcon(fontIcon);
+            SKImage atlas = icon.Texture;
+            SKRectI uv = new((int)icon.Uv0.X, (int)icon.Uv0.Y, (int)icon.Uv1.X, (int)icon.Uv1.Y);
+
+            int width = uv.Right - uv.Left;
             int height = uv.Bottom - uv.Top;
-            
+
             SKBitmap subsetBitmap = new SKBitmap(width, height);
-            
+
             atlas.ReadPixels(
                 new SKImageInfo(width, height),
                 subsetBitmap.GetPixels(),
@@ -172,7 +184,7 @@ internal static class TextureLoader
                 uv.Left,
                 uv.Top
             );
-            
+
             return SKImage.FromBitmap(subsetBitmap);
         } catch (Exception) {
             // The only reason for this to fail is if a bad texture mod is installed
@@ -183,6 +195,8 @@ internal static class TextureLoader
 
     internal static SKImage? LoadTexture(string path)
     {
+        if (PathToImageCache.TryGetValue(path, out SKImage? cachedImage)) return cachedImage;
+
         if (DalamudServices.DataManager == null || DalamudServices.TextureProvider == null)
             throw new InvalidOperationException("Una.Drawing.DrawingLib has not been set-up.");
 
@@ -209,53 +223,123 @@ internal static class TextureLoader
             PathToTexFileCache[path] = texFile;
         }
 
-        SKImageInfo info = new(texFile.Header.Width, texFile.Header.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-
-        IntPtr pixelPtr = Marshal.AllocHGlobal(texFile.ImageData.Length);
-        Marshal.Copy(texFile.ImageData, 0, pixelPtr, texFile.ImageData.Length);
-
-        using SKPixmap pixmap = new(info, pixelPtr);
-        SKImage?       image  = SKImage.FromPixels(pixmap);
-
-        return image;
+        cachedImage = LoadImageFromTexOrPath(texFile, path);
+        if (cachedImage == null) return null;
+        PathToImageCache[path] = cachedImage;
+        return cachedImage;
     }
 
     /// <summary>
     /// Returns a <see cref="TexFile"/> for the given icon ID.
     /// </summary>
-    private static TexFile GetIconFile(uint iconId)
+    private static (TexFile iconFile, string iconPath) GetIconFile(uint iconId)
     {
         if (IconToTexFileCache.TryGetValue(iconId, out var cachedIconFile)) return cachedIconFile;
 
         if (DalamudServices.DataManager == null || DalamudServices.TextureProvider == null)
             throw new InvalidOperationException("Una.Drawing.DrawingLib has not been set-up.");
 
-        string originalIconPath = DalamudServices.TextureProvider.GetIconPath(new() { IconId = iconId, HiRes = true })
-                                  ?? throw new InvalidOperationException($"Failed to get icon path for #{iconId}.");
+        string iconPath = DalamudServices.TextureProvider.GetIconPath(new() { IconId = iconId, HiRes = true });
 
-        string iconPath = DalamudServices.TextureSubstitutionProvider.GetSubstitutedPath(originalIconPath);
+        IconToTexFileCache[iconId] = (GetTextureFile(iconPath) ?? throw new InvalidOperationException($"Failed to load icon {iconId}"), iconPath);
 
-        TexFile? iconFile;
+        return IconToTexFileCache[iconId];
+    }
+
+    /// <summary>
+    /// Returns a <see cref="TexFile"/> for the given game file path if it exists.
+    /// </summary>
+    private static TexFile? GetTextureFile(string path)
+    {
+        if (PathToTexFileCache.TryGetValue(path, out var texFile)) return texFile;
+
+        path = DalamudServices.TextureSubstitutionProvider.GetSubstitutedPath(path);
 
         try {
-            iconFile = Path.IsPathRooted(iconPath)
-                ? DalamudServices.DataManager.GameData.GetFileFromDisk<TexFile>(iconPath)
-                : DalamudServices.DataManager.GetFile<TexFile>(iconPath);
-        } catch (Exception) {
-            // Fall-back to the default icon in case a custom one failed to load.
-            iconFile = DalamudServices.DataManager.GetFile<TexFile>(iconPath);
+            texFile = Path.IsPathRooted(path)
+                ? DalamudServices.DataManager.GameData.GetFileFromDisk<TexFile>(path)
+                : DalamudServices.DataManager.GetFile<TexFile>(path);
+        } catch (Exception e) {
+            DebugLogger.Log($"Failed to load texture {path}. Falling back to default. Error: {e.Message}");
+
+            try {
+                texFile = DalamudServices.DataManager.GetFile<TexFile>(path);
+            } catch {
+                // this should never happen.
+                return null;
+            }
         }
 
-        IconToTexFileCache[iconId] = iconFile
-                                     ?? throw new InvalidOperationException($"Failed to load icon file for #{iconId}.");
+        if (null == texFile) return null;
 
-        return iconFile;
+        PathToTexFileCache[path] = texFile;
+
+        return texFile;
+    }
+
+    /// <summary>
+    /// Returns a <see cref="SKImage"/> for the given <see cref="TexFile"/>.
+    /// Loads from game path if BC5/BC7 texture.
+    /// </summary>
+    private static SKImage? LoadImageFromTexOrPath(TexFile texFile, string path)
+    {
+        IntPtr pixelPtr;
+        int height, width;
+        switch (texFile.Header.Format) {
+            case TexFile.TextureFormat.BC5:
+            case TexFile.TextureFormat.BC7:
+                if (!PathToByteArrayCache.TryGetValue(path, out var byteInfo)) {
+                    var wrap = DalamudServices.TextureProvider.GetFromGame(path).RentAsync().GetAwaiter().GetResult();
+                    var (specs, data) = DalamudServices.TextureReadbackProvider.GetRawImageAsync(wrap, new TextureModificationArgs { DxgiFormat = (int)DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM }).GetAwaiter().GetResult();
+                    
+                    unsafe {
+                        fixed (byte* p = data) {
+                            if (specs.Pitch != specs.Width * 4) {
+                                for (var i = 0; i < specs.Height; i++) {
+                                    new Span<byte>(p + (specs.Pitch * i), specs.Pitch).CopyTo(
+                                        new(p + (specs.Width * 4 * i), specs.Pitch));
+                                }
+                            }
+                        }
+                    }
+                    
+                    height = specs.Height;
+                    width = specs.Width;
+                    PathToByteArrayCache[path] = (data, width, height);
+                } else {
+                    width  = byteInfo.width;
+                    height = byteInfo.height;
+                }
+
+                if (!PathToBytePtrCache.TryGetValue(path, out pixelPtr)) {
+                    pixelPtr = Marshal.AllocHGlobal(PathToByteArrayCache[path].bytes.Length);
+                    Marshal.Copy(PathToByteArrayCache[path].bytes, 0, pixelPtr, PathToByteArrayCache[path].bytes.Length);
+                    PathToBytePtrCache[path] = pixelPtr;
+                }
+                break;
+            default:
+                if (!PathToBytePtrCache.TryGetValue(path, out pixelPtr)) {
+                    pixelPtr = Marshal.AllocHGlobal(texFile.ImageData.Length); 
+                    Marshal.Copy(texFile.ImageData, 0, pixelPtr, texFile.ImageData.Length);
+                    PathToBytePtrCache[path] = pixelPtr;
+                }
+                height = texFile.Header.Height;
+                width = texFile.Header.Width;
+                break;
+        }
+
+        SKImageInfo info = new(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+
+        using SKPixmap pixmap = new(info, pixelPtr);
+        var image = SKImage.FromPixels(pixmap);
+
+        return image;
     }
 }
 
 internal struct UldIcon
 {
     public SKImage Texture { get; init; }
-    public Rect    Rect    { get; init; }
-    public Vector2 Size    { get; set; }
+    public Rect Rect { get; init; }
+    public Vector2 Size { get; set; }
 }

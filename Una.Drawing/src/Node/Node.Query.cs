@@ -45,7 +45,7 @@ public partial class Node
             return cachedNode;
         }
 
-        foreach (var child in _childNodes.ToImmutableArray()) {
+        foreach (var child in _childNodes.ToArray()) {
             var node = child.FindById(nodeId);
 
             if (node != null) {

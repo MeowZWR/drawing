@@ -1,5 +1,5 @@
 ﻿using Dalamud.Interface.Textures.TextureWraps;
-using ImGuiNET;
+
 using Lumina.Misc;
 using System.Collections.Immutable;
 using System.Linq;
@@ -205,7 +205,7 @@ public partial class Node
 
         if (null != _texture) {
             drawList.AddImage(
-                _texture.ImGuiHandle,
+                _texture.Handle,
                 topLeft - offset,
                 bottomRight + offset,
                 Vector2.Zero,
@@ -214,18 +214,18 @@ public partial class Node
             );
         }
 
-        ImDrawListPtr? childDrawList = _drawLists.LastOrDefault();
-        if (null == childDrawList) {
+        ImDrawListPtr childDrawList = _drawLists.LastOrDefault();
+        if (childDrawList.IsNull) {
             DrawTime = _metricStopwatch.Elapsed.TotalMilliseconds;
             _metricStopwatch.Stop();
             return;
         }
 
         if (!IsDisposed) {
-            OnDraw(childDrawList.Value);
+            OnDraw(childDrawList);
 
-            foreach (var childNode in _childNodes.ToImmutableArray()) {
-                childNode.Draw(childDrawList.Value);
+            foreach (var childNode in _childNodes.ToArray()) {
+                childNode.Draw(childDrawList);
             }
         }
 
@@ -341,7 +341,7 @@ public partial class Node
         var x = pos.X;
         var y = pos.Y;
 
-        foreach (var child in _childNodes.ToImmutableArray()) {
+        foreach (var child in _childNodes.ToArray()) {
             Layout.OverridePositionsOf(child, new Vector2(x, y));
 
             if (ComputedStyle.Flow == Flow.Vertical) {
@@ -426,7 +426,7 @@ public partial class Node
         const float uv3 = 1.0f;
 
         ImDrawListPtr dl   = drawList;
-        IntPtr        id   = TextureLoader.GetEmbeddedTexture("Shadow.png").ImGuiHandle;
+        ImTextureID   id   = TextureLoader.GetEmbeddedTexture("Shadow.png").Handle;
         Vector2       p    = rect.TopLeft;
         Vector2       s    = new(rect.Width, rect.Height);
         Vector2       m    = new(p.X + s.X, p.Y + s.Y);
@@ -530,7 +530,7 @@ public partial class Node
         Vector2       offset      = new(32, 32);
 
         ptr.AddImage(
-            _texture.ImGuiHandle,
+            _texture.Handle,
             topLeft - offset,
             bottomRight + offset,
             Vector2.Zero,

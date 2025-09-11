@@ -1,4 +1,4 @@
-﻿using ImGuiNET;
+﻿
 using System.Linq;
 
 namespace Una.Drawing;
@@ -106,6 +106,16 @@ public partial class Node
     /// is no drag operation in progress.
     /// </summary>
     public static Node? DraggedNode { get; private set; }
+
+    /// <summary>
+    /// The color that will be used as background when rendering a tooltip.
+    /// </summary>
+    public static uint TooltipBackgroundColor { get; set; } = 0xFF353535;
+
+    /// <summary>
+    /// The color that will be used as text color when rendering a tooltip.
+    /// </summary>
+    public static uint TooltipTextColor { get; set; } = 0xFFCACACA;
     
     private bool   _isInWindowOrInteractiveParent;
     private bool   _didStartInteractive;
@@ -352,8 +362,8 @@ public partial class Node
     private static unsafe bool IsInWindowDrawList(ImDrawListPtr drawList)
     {
         return
-            drawList.NativePtr != ImGui.GetForegroundDrawList().NativePtr
-            && drawList.NativePtr != ImGui.GetBackgroundDrawList().NativePtr;
+            drawList.Handle != ImGui.GetForegroundDrawList().Handle
+            && drawList.Handle != ImGui.GetBackgroundDrawList().Handle;
     }
 
     private void RaiseEvent(Action<Node>? action)
@@ -415,15 +425,14 @@ public partial class Node
         if (_tooltipHoverStartTime < now - 500) {
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(8, 6));
             ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 6);
-            ImGui.PushStyleColor(ImGuiCol.PopupBg, 0xFF353535);
-            ImGui.PushStyleColor(ImGuiCol.Text, 0xFFCACACA);
+            ImGui.PushStyleColor(ImGuiCol.PopupBg, TooltipBackgroundColor);
+            ImGui.PushStyleColor(ImGuiCol.Text, TooltipTextColor);
             ImGui.BeginTooltip();
             ImGui.PushTextWrapPos(420.0f);
             ImGui.TextUnformatted(Tooltip);
             ImGui.EndTooltip();
             ImGui.PopStyleColor(2);
             ImGui.PopStyleVar(2);
-            DebugLogger.Log($"Render tooltip now!");
         }
     }
 

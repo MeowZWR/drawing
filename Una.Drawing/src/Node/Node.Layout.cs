@@ -1,6 +1,7 @@
-﻿using ImGuiNET;
+﻿
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Una.Drawing;
 
@@ -82,7 +83,7 @@ public partial class Node
 
         var changed = false;
 
-        foreach (Node child in _childNodes.ToImmutableArray()) {
+        foreach (Node child in _childNodes.ToArray()) {
             bool result         = child.InvokeReflowHook();
             if (result) changed = true;
         }
@@ -97,7 +98,7 @@ public partial class Node
         Dictionary<Anchor.AnchorPoint, List<Node>> anchorNodes = [];
 
         try {
-            foreach (Node child in _childNodes.ToImmutableArray()) {
+            foreach (Node child in _childNodes.ToArray()) {
                 if (!anchorNodes.TryGetValue(child.ComputedStyle.Anchor.Point, out var value)) {
                     anchorNodes[child.ComputedStyle.Anchor.Point] = value = [];
                 }
@@ -108,7 +109,7 @@ public partial class Node
             AnchorToChildNodes = anchorNodes;
         } catch (ArgumentException) {
             // This can happen if the child node is added or disposed while
-            // the ".ToImmutableArray()" method is being called, in which case
+            // the ".ToArray()" method is being called, in which case
             // we'll reflow on the next frame anyway.
         }
     }

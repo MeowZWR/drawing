@@ -1,6 +1,6 @@
 ﻿using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
-using ImGuiNET;
+
 using System.Collections.Immutable;
 using System.Linq;
 using Task = System.Threading.Tasks.Task;
@@ -56,7 +56,7 @@ public partial class Node
         OnChildAdded   += OnSortableChildAdded;
         OnChildRemoved += OnSortableChildRemoved;
 
-        foreach (Node child in _childNodes.ToImmutableArray()) {
+        foreach (Node child in _childNodes.ToArray()) {
             OnSortableChildAdded(child);
         }
     }
@@ -66,7 +66,7 @@ public partial class Node
         OnChildAdded   -= OnSortableChildAdded;
         OnChildRemoved -= OnSortableChildRemoved;
 
-        foreach (Node child in _childNodes.ToImmutableArray()) {
+        foreach (Node child in _childNodes.ToArray()) {
             OnSortableChildRemoved(child);
         }
     }

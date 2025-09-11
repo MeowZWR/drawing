@@ -1,5 +1,5 @@
 ﻿using ExamplePlugin.Tests;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -48,12 +48,25 @@ public sealed partial class ExamplePlugin
         float max = _frameTimeHistory.Max();
         
         ImGui.PushStyleColor(ImGuiCol.PlotLines, max <= 10.0f ? 0xFF4D8B4D : 0xFF8B4D4D);
+        
+        /*
+         public static void PlotLines(
+           ImU8String label,
+           ReadOnlySpan<float> values,
+           int valuesOffset = 0,
+           ImU8String overlayText = default,
+           float scaleMin = float.MaxValue,
+           float scaleMax = float.MaxValue,
+           Vector2 graphSize = default,
+           int stride = sizeof(float)
+         )
+         */
+        
         ImGui.PlotLines(
-            "##FrameTime", // Unique ID
-            ref _frameTimeHistory[0],
-            HistorySize,
+            new ImU8String("##FrameTime"), // Unique ID
+            new ReadOnlySpan<float>(_frameTimeHistory),
             _dataIndex,
-            $"Frame time {max:F2} ms",
+            new ImU8String($"Frame time {max:F2} ms"),
             0.0f,
             30.0f,
             graphSize
@@ -181,11 +194,11 @@ public sealed partial class ExamplePlugin
         uint aButtonColorH = 0xFF4D8B4D;
         uint aButtonColorA = 0xFF4D8B4D;
 
-        ImGui.PushStyleColor(ImGuiCol.Button, Node.DrawDebugInfo ? aButtonColor : cButtonColor);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Node.DrawDebugInfo ? aButtonColorH : cButtonColorH);
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Node.DrawDebugInfo ? aButtonColorA : cButtonColorA);
-        if (ImGui.Button(Node.DrawDebugInfo ? "Hide debug bounds" : "Show Debug Bounds"))
-            Node.DrawDebugInfo = !Node.DrawDebugInfo;
+        ImGui.PushStyleColor(ImGuiCol.Button, Node.DrawDebugBoundingBoxes ? aButtonColor : cButtonColor);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Node.DrawDebugBoundingBoxes ? aButtonColorH : cButtonColorH);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Node.DrawDebugBoundingBoxes ? aButtonColorA : cButtonColorA);
+        if (ImGui.Button(Node.DrawDebugBoundingBoxes ? "Hide debug bounds" : "Show Debug Bounds"))
+            Node.DrawDebugBoundingBoxes = !Node.DrawDebugBoundingBoxes;
         ImGui.PopStyleColor(3);
 
         ImGui.SameLine();

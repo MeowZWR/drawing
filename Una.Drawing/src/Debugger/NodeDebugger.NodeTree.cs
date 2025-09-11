@@ -1,5 +1,5 @@
 ﻿using Dalamud.Game.Text;
-using ImGuiNET;
+
 using System.Linq;
 
 namespace Una.Drawing.Debugger;

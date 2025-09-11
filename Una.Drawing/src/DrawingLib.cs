@@ -166,6 +166,7 @@ internal class DalamudServices
     [PluginService] public static IDataManager                 DataManager                 { get; set; } = null!;
     [PluginService] public static ITextureProvider             TextureProvider             { get; set; } = null!;
     [PluginService] public static ITextureSubstitutionProvider TextureSubstitutionProvider { get; set; } = null!;
+    [PluginService] public static ITextureReadbackProvider     TextureReadbackProvider     { get; set; } = null!;
     [PluginService] public static IPluginLog                   PluginLog                   { get; set; } = null!;
     [PluginService] public static ICommandManager              CommandManager              { get; set; } = null!;
     [PluginService] public static IChatGui                     ChatGui                     { get; set; } = null!;

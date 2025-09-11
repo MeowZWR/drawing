@@ -1,4 +1,4 @@
-﻿using ImGuiNET;
+﻿
 using System.Reflection;
 
 namespace Una.Drawing.Debugger;

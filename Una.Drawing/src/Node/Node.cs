@@ -266,10 +266,11 @@ public partial class Node : IDisposable
     private bool    _inheritTags;
     private int     _sortIndex = -1;
 
-    private readonly ObservableHashSet<string>  _classList  = [];
-    private readonly ObservableHashSet<string>  _tagsList   = [];
-    private          ObservableCollection<Node> _childNodes = [];
-
+    private readonly ObservableHashSet<string>   _classList   = [];
+    private readonly ObservableHashSet<string>   _tagsList    = [];
+    private          ObservableCollection<Node>  _childNodes  = [];
+    private readonly Dictionary<string, object?> _attachments = new();
+    
     public Node()
     {
         ComputedStyle                     = ComputedStyleFactory.CreateDefault();
@@ -319,7 +320,7 @@ public partial class Node : IDisposable
         OnDisposed();
 
         lock (_childNodes) {
-            foreach (var child in _childNodes.ToImmutableArray()) child.Dispose();
+            foreach (var child in _childNodes.ToArray()) child.Dispose();
         }
 
         NodeValue = null;
@@ -372,7 +373,8 @@ public partial class Node : IDisposable
         _style             = new();
         _intermediateStyle = new();
         _stylesheet        = null;
-
+        _attachments.Clear();
+        
         ClearTextCache();
         ClearQuerySelectorCache();
         ClearCachedQuerySelectors();
@@ -408,6 +410,31 @@ public partial class Node : IDisposable
     /// cleanup.
     /// </summary>
     protected virtual void OnDisposed() { }
+
+    /// <summary>
+    /// Attach an arbitrary object to this node. This can be useful for storing
+    /// additional data related to the node without having to create a derived
+    /// class.
+    /// </summary>
+    /// <remarks>
+    /// The attached objects are dereferenced when the node is disposed of. If
+    /// you need to dispose objects while the node is still alive, you should
+    /// nullify the attachment manually.
+    /// </remarks>
+    /// <param name="key">A unique identifier for this attachment.</param>
+    /// <param name="value">The value to attach.</param>
+    /// <typeparam name="T"></typeparam>
+    public void Attach<T>(string key, T? value) => _attachments[key] = value;
+
+    /// <summary>
+    /// Returns the attached object for the given key, or null if no object is
+    /// attached for that key, or if the attached object is not of the requested
+    /// type.
+    /// </summary>
+    /// <param name="key">The unique identifier used to identify the attachment.</param>
+    /// <typeparam name="T">The type of object to retrieve.</typeparam>
+    /// <returns>The stored attachment or NULL if no such attachment exists of the specified key and type.</returns>
+    public T? GetAttachment<T>(string key) => _attachments.TryGetValue(key, out var obj) ? (T?)obj : default;
 
     /// <summary>
     /// Toggles the given class name in the class list of this node. If the
@@ -483,7 +510,7 @@ public partial class Node : IDisposable
     public void Clear()
     {
         lock (_childNodes) {
-            foreach (var node in _childNodes.ToImmutableArray()) {
+            foreach (var node in _childNodes.ToArray()) {
                 node.Dispose();
             }
         }
@@ -499,7 +526,7 @@ public partial class Node : IDisposable
             TagsList = ParentNode.TagsList;
         }
 
-        foreach (Node child in _childNodes.ToImmutableArray()) {
+        foreach (Node child in _childNodes.ToArray()) {
             child.InheritTagsFromParent();
         }
     }

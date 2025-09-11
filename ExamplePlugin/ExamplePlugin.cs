@@ -4,7 +4,7 @@ using System.Linq;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ExamplePlugin.Tests;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System.Numerics;
 using Una.Drawing;
 
@@ -39,7 +39,6 @@ public sealed partial class ExamplePlugin : IDalamudPlugin
             plugin.SavePluginConfig(_configuration);
         }
 
-        Node.DrawDebugInfo               = false;
         Node.UseThreadedStyleComputation = true;
         Node.ScaleFactor                 = _configuration.ScaleFactor;
 

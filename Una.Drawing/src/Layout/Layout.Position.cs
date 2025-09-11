@@ -7,7 +7,7 @@ internal static partial class Layout
 {
     private static void ComputePositions(Node root)
     {
-        foreach (var anchorPoint in root.AnchorToChildNodes.Keys.ToImmutableArray()
+        foreach (var anchorPoint in root.AnchorToChildNodes.Keys.ToArray()
                                         .Where(anchorPoint => root.AnchorToChildNodes[anchorPoint].Count > 0)
         ) {
             PositionNodesWithSameAnchor(anchorPoint, root, root.AnchorToChildNodes[anchorPoint]);
@@ -99,7 +99,7 @@ internal static partial class Layout
                 i += step;
                 continue;
             }
-            
+
             x = MathF.Floor(x);
             y = MathF.Floor(y);
 
@@ -210,10 +210,15 @@ internal static partial class Layout
 
     private static float GetChildrenWidth(Node root, List<Node> children)
     {
-        var visibleChildren = children.Where(node => node is { IsDisposed: false, ComputedStyle.IsVisible: true });
-        var enumerable      = visibleChildren as Node[] ?? visibleChildren.ToArray();
+        var visibleChildren = new List<Node>();
+        foreach (var _n in children)
+            if (_n is { IsDisposed: false, ComputedStyle.IsVisible: true })
+                visibleChildren.Add(_n);
 
-        float width = enumerable.Sum(node => node.OuterWidth);
+        var enumerable = visibleChildren.ToArray();
+
+        float width                           = 0f;
+        foreach (var _n2 in enumerable) width += _n2.OuterWidth;
 
         if (root.ComputedStyle.Flow == Flow.Horizontal) {
             width += root.ComputedStyle.Gap > 0 ? (enumerable.Length - 1) * root.ComputedStyle.Gap : 0;
@@ -224,10 +229,15 @@ internal static partial class Layout
 
     private static float GetChildrenHeight(Node root, List<Node> children)
     {
-        var visibleChildren = children.Where(node => node is { IsDisposed: false, ComputedStyle.IsVisible: true });
-        var enumerable      = visibleChildren as Node[] ?? visibleChildren.ToArray();
+        var visibleChildren = new System.Collections.Generic.List<Node>();
+        foreach (var _n in children)
+            if (_n is { IsDisposed: false, ComputedStyle.IsVisible: true })
+                visibleChildren.Add(_n);
 
-        float height = enumerable.Sum(node => node.OuterHeight);
+        var enumerable = visibleChildren.ToArray();
+
+        float height                           = 0f;
+        foreach (var _n2 in enumerable) height += _n2.OuterHeight;
 
         if (root.ComputedStyle.Flow == Flow.Vertical) {
             height += root.ComputedStyle.Gap > 0 ? (enumerable.Length - 1) * root.ComputedStyle.Gap : 0;
