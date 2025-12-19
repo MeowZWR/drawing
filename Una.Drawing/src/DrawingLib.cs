@@ -116,8 +116,10 @@ public class DrawingLib
         UdtLoader.Dispose();
 
         // Force the GC to run to clean up any remaining resources.
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
+        if (!DalamudServices.Framework.IsFrameworkUnloading) {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
     }
 
     private static void OnDraw()
