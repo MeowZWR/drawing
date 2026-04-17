@@ -8,4 +8,6 @@ public enum UldStyle
     TransparentBlue, // this is actually named Clear Blue but not sure if that should be fixed
     ClearWhite,
     ClearGreen,
+    ClearPink,
+    ClearGray,
 }
