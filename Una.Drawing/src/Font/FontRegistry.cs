@@ -10,6 +10,31 @@ public static class FontRegistry
     internal static Dictionary<uint, IFont> Fonts  { get; }      = [];
     internal static SKTypeface              Glyphs { get; set; } = SKTypeface.Default;
 
+    private static readonly string[] DefaultCjkFontCandidates =
+    [
+        "NotoSansCJKsc-Medium.otf",
+        "NotoSansCJK-Medium.ttc",
+        "NotoSansKR-Regular.otf",
+    ];
+
+    public static FileInfo ResolveDalamudFontAsset(string assetDirectory, params string[] fileNames)
+    {
+        string uiRes = Path.Combine(assetDirectory, "UIRes");
+
+        foreach (string fileName in fileNames) {
+            var file = new FileInfo(Path.Combine(uiRes, fileName));
+            if (file.Exists) return file;
+        }
+
+        throw new FileNotFoundException(
+            $"None of the font files were found in {uiRes}.",
+            Path.Combine(uiRes, fileNames[0])
+        );
+    }
+
+    public static FileInfo ResolveDefaultCjkFont(string assetDirectory) =>
+        ResolveDalamudFontAsset(assetDirectory, DefaultCjkFontCandidates);
+
     public static IEnumerable<string> GetFontFamilies()
     {
         // Remove duplicates and sort alphabetically.

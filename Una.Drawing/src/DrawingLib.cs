@@ -41,17 +41,10 @@ public class DrawingLib
         DebugLogger.Writer = DalamudServices.PluginLog;
 #endif
 
-        // Use the Noto Sans font that comes with Dalamud as the default font,
-        // as it supports a wide range of characters, including Japanese.
+        // Use the Noto Sans font that comes with Dalamud as the default font.
         FontRegistry.SetNativeFontFamily(
             0,
-            new FileInfo(
-                Path.Combine(
-                    pluginInterface.DalamudAssetDirectory.FullName,
-                    "UIRes",
-                    "NotoSansCJKsc-Medium.otf"
-                )
-            ),
+            FontRegistry.ResolveDefaultCjkFont(pluginInterface.DalamudAssetDirectory.FullName),
             0
         );
 

@@ -23,7 +23,39 @@ internal static class FontFactory
 
     internal static IFont CreateFromFontFile(FileInfo file, float sizeOffset)
     {
-        return new DynamicFont(SKTypeface.FromFile(file.FullName), FontRegistry.Glyphs, sizeOffset);
+        return new DynamicFont(LoadTypefaceFromFile(file), FontRegistry.Glyphs, sizeOffset);
+    }
+
+    private static SKTypeface LoadTypefaceFromFile(FileInfo file)
+    {
+        if (file.Name.Equals("NotoSansCJK-Medium.ttc", StringComparison.OrdinalIgnoreCase)
+            && TryLoadCjkScTypeface(file.FullName) is { } scTypeface) {
+            return scTypeface;
+        }
+
+        return SKTypeface.FromFile(file.FullName);
+    }
+
+    private static SKTypeface? TryLoadCjkScTypeface(string path)
+    {
+        string? firstFamily = null;
+
+        for (int index = 0; index < 10; index++) {
+            var typeface = SKTypeface.FromFile(path, index);
+            string family = typeface.FamilyName;
+
+            if (family.Contains("CJK SC", StringComparison.Ordinal)) {
+                return typeface;
+            }
+
+            if (index == 0) {
+                firstFamily = family;
+            } else if (family == firstFamily) {
+                break;
+            }
+        }
+
+        return null;
     }
 
     internal static IFont CreateFromFontStream(Stream stream, float sizeOffset)
