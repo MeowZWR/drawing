@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using System.Xml;
+﻿using System.Xml;
 
 namespace Una.Drawing;
 
@@ -8,20 +7,15 @@ internal sealed partial class UdtParser
     private void ParseImportNode(XmlElement node)
     {
         if (!node.HasAttribute("from")) {
-            throw new Exception($"Import node \"{node.Name}\" in \"{Filename}\" has no \"from\" attribute.");
+            throw new($"Import node \"{node.Name}\" in \"{Filename}\" has no \"from\" attribute.");
         }
 
         string resourceName = node.GetAttribute("from");
         if (resourceName == "") {
-            throw new Exception($"Import node \"{node.Name}\" in \"{Filename}\" has an empty \"from\" attribute.");
+            throw new($"Import node \"{node.Name}\" in \"{Filename}\" has an empty \"from\" attribute.");
         }
 
-        if (_assembly == null) {
-            throw new Exception(
-                $"UDT \"{Filename}\" has been loaded without an assembly. Cannot import \"{resourceName}\".");
-        }
-
-        UdtDocument doc = LoadFromAssembly(_assembly, resourceName);
+        UdtDocument doc = LoadFromAssembly(resourceName);
 
         if (doc.RootNode != null) {
             _rootNode = doc.RootNode;
@@ -31,14 +25,17 @@ internal sealed partial class UdtParser
         MergeTemplatesFrom(doc);
     }
 
-    private UdtDocument LoadFromAssembly(Assembly assembly, string resourceName)
+    private UdtDocument LoadFromAssembly(string resourceName)
     {
         try {
-            return UdtLoader.LoadFromAssembly(assembly, resourceName);
+            return UdtLoader.Load(resourceName);
         } catch (Exception err) {
-            throw new Exception(
-                $"Failed to load UDT \"{resourceName}\" from \"{assembly.GetName().Name}\", imported from \"{Filename}\".\n{err.Message}"
-            );
+            // Crashing here may cause ImGui to go haywire.
+            string msg = $"Failed to load UDT \"{resourceName}\", imported from \"{Filename}\".\n{err.Message}";
+
+            DalamudServices.PluginLog.Error(msg);
+
+            return new(resourceName, new() { NodeValue = msg, Style = new() { Color = new(255, 0, 0), }, }, null, []);
         }
     }
 
