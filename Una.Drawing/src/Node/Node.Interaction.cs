@@ -139,10 +139,12 @@ public partial class Node
             MouseCursor.RemoveMouseOver(this);
             return;
         }
-        
+
+        bool isPassthrough = IsPassthroughDrawList(drawList);
+
         // Only allow interaction if the window has focus.
         // TODO: Maybe make an option toggle for this behavior.
-        if (IsInWindowDrawList(drawList) && !ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
+        if (!isPassthrough && IsInWindowDrawList(drawList) && !ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
             MouseCursor.RemoveMouseOver(this);
             IsMouseOver = false;
             ToggleTag("hover", false);
@@ -166,7 +168,7 @@ public partial class Node
         string  imGuiId           = InternalId;
         Vector2 boundingBoxSize   = Bounds.PaddingSize.ToVector2();
         Node?   interactiveParent = GetInteractiveParent();
-        _isInWindowOrInteractiveParent = IsInWindowDrawList(drawList) || interactiveParent != null;
+        _isInWindowOrInteractiveParent = (!isPassthrough && IsInWindowDrawList(drawList)) || interactiveParent != null;
 
         // Disabled to allow for multi-monitor support. Leaving this here in case something breaks.
         // ImGui.SetNextWindowViewport(ImGui.GetMainViewport().ID);
@@ -364,6 +366,11 @@ public partial class Node
         return
             drawList.Handle != ImGui.GetForegroundDrawList().Handle
             && drawList.Handle != ImGui.GetBackgroundDrawList().Handle;
+    }
+
+    private static unsafe bool IsPassthroughDrawList(ImDrawListPtr drawList)
+    {
+        return PassthroughDrawListHandles.Contains((nint)drawList.Handle);
     }
 
     private void RaiseEvent(Action<Node>? action)
