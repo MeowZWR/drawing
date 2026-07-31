@@ -10,6 +10,13 @@ namespace Una.Drawing;
 public partial class Node : IDisposable
 {
     /// <summary>
+    /// Draw list handles registered as passthrough (no-input) host windows.
+    /// Nodes rendered into these draw lists skip the window-focus guard and
+    /// use top-level ImGui.Begin windows for hit-testing instead of BeginChild.
+    /// </summary>
+    public static readonly HashSet<nint> PassthroughDrawListHandles = [];
+
+    /// <summary>
     /// Defines the global scale factor across all nodes.
     /// </summary>
     public static float ScaleFactor { get; set; } = 1.0f;

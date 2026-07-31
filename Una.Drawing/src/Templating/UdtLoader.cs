@@ -6,10 +6,63 @@ namespace Una.Drawing;
 
 public static class UdtLoader
 {
-    private static readonly HashSet<string>                CircularReferences    = [];
-    
+    private static readonly HashSet<string>   CircularReferences = [];
+    private static readonly HashSet<Assembly> Assemblies         = [];
+
     internal static readonly List<IUdtAttributeValueParser>                AttributeValueParsers = [];
-    internal static readonly Dictionary<string, List<IUdtDirectiveParser>> DirectiveParsers      = []; 
+    internal static readonly Dictionary<string, List<IUdtDirectiveParser>> DirectiveParsers      = [];
+
+    /// <summary>
+    /// <para>
+    /// Registers the given assembly to load UDT resources from when using the
+    /// <see cref="Load"/> method.
+    /// </para>
+    /// <para>
+    /// Note that import directives inside UDT XML files always use this method
+    /// to resolve referenced resources. This means that it is generally safer
+    /// to always register an assembly when using <see cref="LoadFromAssembly"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="assembly"></param>
+    public static void AddAssembly(Assembly assembly)
+    {
+        Assemblies.Add(assembly);
+    }
+
+    /// <summary>
+    /// Removes the given assembly from the internal assemblies list to load
+    /// UDT resources from. Resources can no longer be resolved from the given
+    /// assembly once removed.
+    /// </summary>
+    /// <param name="assembly">The assembly to remove from the list.</param>
+    public static void RemoveAssembly(Assembly assembly)
+    {
+        Assemblies.Remove(assembly);
+    }
+
+    /// <summary>
+    /// Loads a UDT XML file from one of the registered assemblies.
+    /// </summary>
+    /// <param name="resourceName">The name of the resource.</param>
+    /// <param name="throwOnFailure">Throw an exception on failure. Default is true.</param>
+    /// <exception cref="FileNotFoundException">If the resource does not exist.</exception>
+    /// <exception cref="InvalidOperationException">When a circular reference is detected.</exception>
+    public static UdtDocument Load(string resourceName, bool throwOnFailure = true)
+    {
+        foreach (var assembly in Assemblies) {
+            var resource = assembly
+                .GetManifestResourceNames()
+                .FirstOrDefault(r => r.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
+
+            if (resource != null) {
+                return LoadFromAssembly(assembly, resourceName, throwOnFailure);
+            }
+        }
+
+        return throwOnFailure
+            ? throw new FileNotFoundException($"Resource '{resourceName}' not found in assembly resources.")
+            : new(resourceName, null, null, []);
+    }
 
     /// <summary>
     /// Loads a UDT XML file from embedded resources in the given assembly.
@@ -22,8 +75,8 @@ public static class UdtLoader
     public static UdtDocument LoadFromAssembly(Assembly assembly, string resourceName, bool throwOnFailure = true)
     {
         var resource = assembly
-                      .GetManifestResourceNames()
-                      .FirstOrDefault(r => r.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
+            .GetManifestResourceNames()
+            .FirstOrDefault(r => r.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
 
         if (resource == null) {
             throw new FileNotFoundException($"Resource '{resourceName}' not found in assembly resources.");
@@ -56,16 +109,17 @@ public static class UdtLoader
 
             return document;
         } catch (Exception e) {
-            DalamudServices.PluginLog.Error($"An exception occurred while loading UDT \"{resourceName}\":\n{e.Message}");
+            DalamudServices.PluginLog.Error(
+                $"An exception occurred while loading UDT \"{resourceName}\":\n{e.Message}");
             DalamudServices.PluginLog.Error(e.StackTrace ?? " - No stack trace available - ");
-            
+
             if (throwOnFailure) {
                 throw;
             }
         } finally {
             CircularReferences.Remove(resource);
         }
-        
+
         return new(resourceName, null, null, []);
     }
 
@@ -115,7 +169,7 @@ public static class UdtLoader
         if (!DirectiveParsers.TryGetValue(parser.Name, out var parserList)) {
             DirectiveParsers.Add(parser.Name, parserList = ([]));
         }
-        
+
         if (parserList.Contains(parser)) return;
         parserList.Add(parser);
     }
